@@ -61,6 +61,7 @@ export default function Projects() {
               <div className="dir">{p.dir}</div>
               {!p.exists ? <span className="chip bad">folder missing</span> : null}
               <div className="row" style={{ marginTop: 4 }}>
+                {p.exists ? <Button className="xs" onClick={(e) => { e.stopPropagation(); api.post(`/api/projects/${p.id}/open-folder`, {}).catch((err) => toast(err.message, "error")); }}>📁 Open folder</Button> : null}
                 <Button className="ghost xs danger" onClick={(e) => { e.stopPropagation(); api.del(`/api/projects/${p.id}`).then(load); }}>Remove from list</Button>
               </div>
             </div>
