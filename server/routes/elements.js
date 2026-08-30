@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import { readJson, writeJson, P, slugify, httpError, exists } from "../lib/store.js";
 import { imageGenerate, imageEdit } from "../venice.js";
 import { completeJson } from "../lib/llm.js";
-import { elementSystem, referencePrompt, editAnglePrompt, ANGLE_INSTRUCTIONS, presenceReferencePrompt, editStatePrompt } from "../lib/prompts.js";
+import { elementSystem, referencePrompt, editAnglePrompt, ANGLE_INSTRUCTIONS, presenceReferencePrompt, editStatePrompt, LOCATION_ANGLES } from "../lib/prompts.js";
 import { loadCanon, loadElements } from "../lib/canon.js";
 import { saveBase64, saveBuffer, toDataUrl, stamp } from "../lib/media.js";
 import { model as getModel } from "../lib/modelcache.js";
@@ -194,6 +194,29 @@ r.post("/:slug/angles", async (req, res, next) => {
     const editModel = req.body?.editModel || project.defaults.editModel;
     const frontal = await toDataUrl(path.join(dir, el.angles.frontal.file));
     const errors = [];
+    if (el.type === "location") {
+      // A room can't be "rotated" by an image edit — re-shoot each camera position from the identical description.
+      const canon = await loadCanon(dir);
+      const modelId = req.body?.model || el.imageModel || el.angles.frontal.model || project.defaults.imageModel;
+      const m = await getModel(modelId);
+      if (!m) throw httpError(400, "Unknown image model " + modelId);
+      const negative = ["people, person, figure, silhouette, face, hands, crowd", canon.hardNegatives, el.negatives].filter(Boolean).join(", ");
+      for (const a of angles) {
+        if (!LOCATION_ANGLES[a]) continue;
+        try {
+          const prompt = referencePrompt({ worldSeed: canon.worldSeed, description: el.description, angle: a, type: "location" });
+          const body = imageBody(m, { prompt, negative, aspect: project.defaults.aspect, resolution: project.defaults.resolution, seed: el.angles.frontal.seed ?? el.seed, safeMode: project.defaults.safeMode, hideWatermark: project.defaults.hideWatermark });
+          if (m.model_spec?.capabilities?.supportsStyleReferences !== false) body.style_references = [{ image: frontal, strength: 0.7 }];
+          const r_ = await imageGenerate(body);
+          const abs = path.join(P.elementDir(dir, el.slug), "angles", `${a}-${stamp()}.png`);
+          await saveBase64(abs, r_.images[0]);
+          el.angles[a] = { file: rel(dir, abs), model: modelId, prompt, from: el.angles.frontal.file, seed: body.seed ?? null };
+          el.qa[a] = null;
+        } catch (e) { errors.push({ angle: a, error: e.message }); }
+      }
+      await saveEl(dir, el.slug, el);
+      return res.json({ element: el, errors });
+    }
     for (const a of angles) {
       const state = isPresence ? (el.states || []).find((s) => s.key === a) : null;
       if (!(isPresence ? state : ANGLE_INSTRUCTIONS[a])) continue;

@@ -6,6 +6,7 @@ import { Button, ImproveField, ModelPicker, StepHead, Thumb, Empty, money } from
 import { ClaudeAction, ImportButton } from "../components/manual.jsx";
 
 const ANGLES = [["frontal", "Frontal"], ["q45", "45°"], ["profile", "Profile"], ["rear", "¾ rear"]];
+const LOC_ANGLES = [["frontal", "Establishing"], ["q45", "45° left"], ["profile", "Cross view"], ["rear", "Reverse"]];
 const QA = [["silhouette", "Form & silhouette"], ["wardrobe", "Material & wardrobe"], ["features", "Fingerprint features present"], ["style", "Style coherent"], ["scale", "Scale correct"]];
 
 export default function Elements() {
@@ -96,7 +97,8 @@ function ElementEditor() {
 
   const ttsModel = (models.tts || []).find((m) => m.id === (el.voice?.model || project.defaults.ttsModel));
   const isPresence = el.type === "presence";
-  const SLOTS = isPresence ? (el.states || []).map((s, i) => [i === 0 ? "frontal" : s.key, s.name]) : ANGLES;
+  const isLocation = el.type === "location";
+  const SLOTS = isPresence ? (el.states || []).map((s, i) => [i === 0 ? "frontal" : s.key, s.name]) : isLocation ? LOC_ANGLES : ANGLES;
   const anglesDone = SLOTS.filter(([a]) => el.angles?.[a]).length;
   const qaPassed = SLOTS.filter(([a]) => el.qa?.[a]?.verdict === "pass").length;
   const isChar = el.type === "character" || isPresence;
@@ -136,7 +138,7 @@ function ElementEditor() {
       </div>
 
       <div className="card">
-        <header><h2>{isPresence ? "B · Manifestation board → one baseline plate" : "B · Identity board → one winning face"}</h2><span className="grow" /><span className="dim small">{perImage != null ? `≈ ${money(perImage)} / image` : ""}</span></header>
+        <header><h2>{isPresence ? "B · Manifestation board → one baseline plate" : isLocation ? "B · Establishing plates → one winning plate" : "B · Identity board → one winning face"}</h2><span className="grow" /><span className="dim small">{perImage != null ? `≈ ${money(perImage)} / image` : ""}</span></header>
         <p className="muted">{isPresence ? "Generate baseline-state plates of the manifestation (no people). Pick ONE; every other state is derived from it so the environment stays identical." : "Generate frontal candidates with the verbatim description. Pick ONE. Everything downstream anchors to it. (Don't generate pretty world shots first — you'll fall for off-canon faces.)"}</p>
         <div className="row">
           <ModelPicker type="image" value={imageModel} onChange={setImageModel} allowEmpty small filter={(m) => !/bg-remover|upscal|edit/.test(m.id)} />
@@ -152,9 +154,9 @@ function ElementEditor() {
       </div>
 
       <div className="card">
-        <header><h2>{isPresence ? "C · Four locked states" : "C · Four locked angles"}</h2><span className="grow" /><span className="chip">{anglesDone}/{SLOTS.length || 4} {isPresence ? "states" : "angles"} · {qaPassed} QA passed</span></header>
-        <p className="muted">{isPresence ? "Each state is derived from the baseline plate with the identical manifestation text — only the state clause changes. Score each; fail 2+ checks → regenerate that state." : "Derived from the winning frontal with the identical description — only the angle instruction changes. Score each: fail 2+ checks → regenerate that angle; 3+ angles failing → go back to B."}</p>
-        <div className="row"><Button className="primary" busy={busy === "angles"} onClick={angles} disabled={!el.angles?.frontal}>{isPresence ? "Derive the other states" : "Derive 45° / profile / ¾ rear"}</Button><span className="dim small">edit model: {project.defaults.editModel}</span></div>
+        <header><h2>{isPresence ? "C · Four locked states" : isLocation ? "C · Four locked camera positions" : "C · Four locked angles"}</h2><span className="grow" /><span className="chip">{anglesDone}/{SLOTS.length || 4} {isPresence ? "states" : "angles"} · {qaPassed} QA passed</span></header>
+        <p className="muted">{isPresence ? "Each state is derived from the baseline plate with the identical manifestation text — only the state clause changes. Score each; fail 2+ checks → regenerate that state." : isLocation ? "Each camera position is re-shot from the identical description (no people), seeded from the establishing plate and using it as a style reference. Score each; fail 2+ checks → regenerate that position." : "Derived from the winning frontal with the identical description — only the angle instruction changes. Score each: fail 2+ checks → regenerate that angle; 3+ angles failing → go back to B."}</p>
+        <div className="row"><Button className="primary" busy={busy === "angles"} onClick={angles} disabled={!el.angles?.frontal}>{isPresence ? "Derive the other states" : isLocation ? "Shoot 45° / cross / reverse" : "Derive 45° / profile / ¾ rear"}</Button><span className="dim small">{isLocation ? `image model: ${imageModel || project.defaults.imageModel}` : `edit model: ${project.defaults.editModel}`}</span></div>
         <div className="angles">
           {SLOTS.map(([a, label]) => {
             const ang = el.angles?.[a]; const q = el.qa?.[a];

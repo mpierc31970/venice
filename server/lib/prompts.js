@@ -90,9 +90,20 @@ export const ANGLE_INSTRUCTIONS = {
   rear: "three-quarter rear view, turned 135 degrees away from camera, full body visible, centered",
 };
 
+/** Location coverage: four camera positions around the same space. No people, ever. */
+export const LOCATION_ANGLES = {
+  frontal: "establishing wide shot from the main entrance looking into the space, eye level, whole space visible",
+  q45: "wide shot from the corner 45 degrees to the left of the entrance, eye level, same space, same furniture and fixtures in their same positions",
+  profile: "cross view from the side wall looking across the space, eye level, same furniture and fixtures in their same positions",
+  rear: "reverse angle from the far end looking back toward the entrance, eye level, same furniture and fixtures in their same positions",
+};
+export const LOCATION_LABELS = { frontal: "Establishing", q45: "45° left", profile: "Cross view", rear: "Reverse" };
+
 /** Reference-image prompt: verbatim description + angle + world seed. Description never changes between angles. */
 export const referencePrompt = ({ worldSeed, description, angle, type }) =>
-  `${worldSeed}\n\n${type === "location" ? "Establishing plate, no people, uncluttered. " : "Character reference sheet on a plain neutral studio background. "}${description}\n\n${ANGLE_INSTRUCTIONS[angle] || angle}`;
+  type === "location"
+    ? `${worldSeed}\n\nLocation plate. No people, no figures, no silhouettes, uncluttered. ${description}\n\nCamera: ${LOCATION_ANGLES[angle] || angle}`
+    : `${worldSeed}\n\nCharacter reference sheet on a plain neutral studio background. ${description}\n\n${ANGLE_INSTRUCTIONS[angle] || angle}`;
 
 export const editAnglePrompt = ({ description, angle }) =>
   `Same subject, identical appearance and wardrobe, same lighting and style. ${description} Render as: ${ANGLE_INSTRUCTIONS[angle] || angle}. Keep every feature identical; only the camera angle changes.`;
