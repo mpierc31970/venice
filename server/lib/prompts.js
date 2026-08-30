@@ -102,7 +102,7 @@ export const LOCATION_LABELS = { frontal: "Establishing", q45: "45° left", prof
 /** Reference-image prompt: verbatim description + angle + world seed. Description never changes between angles. */
 export const referencePrompt = ({ worldSeed, description, angle, type }) =>
   type === "location"
-    ? `${worldSeed}\n\nLocation plate. No people, no figures, no silhouettes, uncluttered. ${description}\n\nCamera: ${LOCATION_ANGLES[angle] || angle}`
+    ? `${worldSeed}\n\nLocation plate. No people, no figures, no silhouettes, no camera equipment, uncluttered. Same time of day and same light sources as the establishing plate. ${description}\n\nViewpoint: ${LOCATION_ANGLES[angle] || angle}`
     : `${worldSeed}\n\nCharacter reference sheet on a plain neutral studio background. ${description}\n\n${ANGLE_INSTRUCTIONS[angle] || angle}`;
 
 export const editAnglePrompt = ({ description, angle }) =>
