@@ -89,7 +89,8 @@ function ElementEditor() {
   const pick = (file) => call("pick", () => api.post(`/api/projects/${id}/elements/${slug}/pick`, { file }), "Frontal chosen. Now derive the other three angles.");
   const angles = () => call("angles", async () => { const r = await api.post(`/api/projects/${id}/elements/${slug}/angles`, {}); if (r.errors?.length) toast(r.errors.map((e) => `${e.angle}: ${e.error}`).join("\n"), "error", 9000); return r; }, "Angles derived. Run the QA checklist on each.");
   const regenAngle = (a) => call("angle-" + a, () => api.post(`/api/projects/${id}/elements/${slug}/angles`, { angles: [a] }), `Regenerated ${a}.`);
-  const qa = (angle, key, val) => { const checks = { ...(el.qa?.[angle]?.checks || {}), [key]: val }; return call("qa", async () => { const r = await api.put(`/api/projects/${id}/elements/${slug}/qa`, { angle, checks }); if (r.advice !== "OK") toast(r.advice, "info"); }); };
+  const approve = (angle) => call("qa", () => api.put(`/api/projects/${id}/elements/${slug}/qa`, { angle, checks: Object.fromEntries(QA.map(([k]) => [k, true])) }));
+  const unapprove = (angle) => call("qa", () => api.put(`/api/projects/${id}/elements/${slug}/qa`, { angle, checks: {} }));
   const lock = (locked) => call("lock", () => api.post(`/api/projects/${id}/elements/${slug}/lock`, { locked }), locked ? `${el.name} locked. References are now used for every shot.` : "Unlocked.");
   const previewVoice = async () => {
     const model = el.voice?.model || project.defaults.ttsModel; const voice = el.voice?.vvId || el.voice?.voice;
@@ -145,7 +146,7 @@ function ElementEditor() {
 
       <div className="card">
         <header><h2>{isPresence ? "B · Manifestation board → one baseline plate" : isLocation ? "B · Establishing plates → one winning plate" : "B · Identity board → one winning face"}</h2><span className="grow" /><span className="dim small">{perImage != null ? `≈ ${money(perImage)} / image` : ""}</span></header>
-        <p className="muted">{isPresence ? "Generate baseline-state plates of the manifestation (no people). Pick ONE; every other state is derived from it so the environment stays identical." : "Generate frontal candidates with the verbatim description. Pick ONE. Everything downstream anchors to it. (Don't generate pretty world shots first — you'll fall for off-canon faces.)"}</p>
+        <p className="muted">{isPresence ? "Generate baseline-state plates of the manifestation (no people). Pick ONE; every other state is derived from it so the environment stays identical." : isLocation ? "Generate establishing plates from the verbatim description (no people). Pick ONE; the other camera positions are re-shot to match it." : "Generate frontal candidates with the verbatim description. Pick ONE. Everything downstream anchors to it. (Don't generate pretty world shots first — you'll fall for off-canon faces.)"}</p>
         <div className="row">
           <ModelPicker type="image" value={imageModel} onChange={setImageModel} allowEmpty small filter={(m) => !/bg-remover|upscal|edit/.test(m.id)} />
           <select style={{ width: 120 }} value={boardCount} onChange={(e) => setBoardCount(Number(e.target.value))}>{[1, 2, 4, 6, 8, 12].map((n) => <option key={n} value={n}>{n} image{n > 1 ? "s" : ""}</option>)}</select>
@@ -160,8 +161,8 @@ function ElementEditor() {
       </div>
 
       <div className="card">
-        <header><h2>{isPresence ? "C · Four locked states" : isLocation ? "C · Four locked camera positions" : "C · Four locked angles"}</h2><span className="grow" /><span className="chip">{anglesDone}/{SLOTS.length || 4} {isPresence ? "states" : "angles"} · {qaPassed} QA passed</span></header>
-        <p className="muted">{isPresence ? "Each state is derived from the baseline plate with the identical manifestation text — only the state clause changes. Score each; fail 2+ checks → regenerate that state." : isLocation ? "Each camera position is re-shot from the identical description (no people), seeded from the establishing plate and using it as a style reference. Score each; fail 2+ checks → regenerate that position." : "Derived from the winning frontal with the identical description — only the angle instruction changes. Score each: fail 2+ checks → regenerate that angle; 3+ angles failing → go back to B."}</p>
+        <header><h2>{isPresence ? "C · Four locked states" : isLocation ? "C · Four locked camera positions" : "C · Four locked angles"}</h2><span className="grow" /><span className="chip">{anglesDone}/{SLOTS.length || 4} {isPresence ? "states" : isLocation ? "positions" : "angles"} · {qaPassed} approved</span></header>
+        <p className="muted">{isPresence ? "Each state is derived from the baseline plate with the identical manifestation text — only the state clause changes. Approve each state that reads clearly; Redo any that drifted." : isLocation ? "Each camera position is re-shot from the identical description (no people), seeded from the establishing plate and using it as a style reference. Approve each one that matches; Redo any that drifted." : "Derived from the winning frontal with the identical description — only the angle instruction changes. Approve each angle that matches; Redo any that drifted. If 3+ drift, go back to B and pick a different face."}</p>
         <div className="row"><Button className="primary" busy={busy === "angles"} onClick={angles} disabled={!el.angles?.frontal}>{isPresence ? "Derive the other states" : isLocation ? "Shoot 45° / cross / reverse" : "Derive 45° / profile / ¾ rear"}</Button><span className="dim small">{isLocation ? `image model: ${imageModel || project.defaults.imageModel}` : `edit model: ${project.defaults.editModel}`}</span></div>
         <div className="angles">
           {SLOTS.map(([a, label]) => {
@@ -171,11 +172,18 @@ function ElementEditor() {
                 <div className="name">{label}</div>
                 {ang ? <Thumb src={media(id, ang.file)} wide={wideRef} /> : <Empty wide={wideRef}><span>{a === "frontal" ? "pick from the board" : "not derived yet"}<br /><ImportButton className="xs ghost" label="Import" accept="image/*" onFile={async (f) => { await call("import-" + a, async () => api.post(`/api/projects/${id}/elements/${slug}/import`, { name: f.name, data: await fileToBase64(f), angle: a }), `Imported ${label}.`); }} /></span></Empty>}
                 {ang ? (
-                  <div className="stack" style={{ gap: 4 }}>
-                    {QA.map(([k, lbl]) => <label key={k} style={{ display: "flex", gap: 6, alignItems: "center", margin: 0, fontSize: 11.5 }}><input type="checkbox" style={{ width: "auto" }} checked={q?.checks?.[k] === true} onChange={(e) => qa(a, k, e.target.checked)} />{lbl}</label>)}
-                    {q ? <span className={`chip ${q.verdict === "pass" ? "ok" : "warn"}`} style={{ alignSelf: "flex-start" }}>{q.verdict === "pass" ? `pass (${q.fails} fail)` : "regenerate"}</span> : null}
-                    {a !== "frontal" ? <Button className="xs" busy={busy === "angle-" + a} onClick={() => regenAngle(a)}>Regenerate</Button> : null}
-                    <ImportButton className="xs ghost" label="Import" accept="image/*" onFile={async (f) => { await call("import-" + a, async () => api.post(`/api/projects/${id}/elements/${slug}/import`, { name: f.name, data: await fileToBase64(f), angle: a }), `Imported ${label}.`); }} />
+                  <div className="stack" style={{ gap: 6 }}>
+                    {q?.verdict === "pass"
+                      ? <span className="chip ok" style={{ alignSelf: "flex-start" }}>✓ approved</span>
+                      : <div className="row" style={{ gap: 4 }}>
+                          <Button className="xs" busy={busy === "qa"} onClick={() => approve(a)} title={`Approve if: ${QA.map(([, l]) => l).join(" · ")}`}>✓ Approve</Button>
+                          {a !== "frontal" ? <Button className="xs ghost" busy={busy === "angle-" + a} onClick={() => regenAngle(a)} title="Re-shoot this position">✗ Redo</Button> : null}
+                        </div>}
+                    <div className="dim" style={{ fontSize: 10.5, lineHeight: 1.3 }}>{a === "frontal" ? "Approve = this is the anchor everything else matches." : `Check: ${QA.map(([, l]) => l).join(" · ")}`}</div>
+                    <div className="row" style={{ gap: 4 }}>
+                      {q?.verdict === "pass" ? <Button className="xs ghost" onClick={() => unapprove(a)}>undo</Button> : null}
+                      <ImportButton className="xs ghost" label="Import" accept="image/*" onFile={async (f) => { await call("import-" + a, async () => api.post(`/api/projects/${id}/elements/${slug}/import`, { name: f.name, data: await fileToBase64(f), angle: a }), `Imported ${label}.`); }} />
+                    </div>
                   </div>
                 ) : null}
               </div>
