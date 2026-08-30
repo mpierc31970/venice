@@ -7,7 +7,12 @@ import { ClaudeAction, ImportButton } from "../components/manual.jsx";
 
 const ANGLES = [["frontal", "Frontal"], ["q45", "45°"], ["profile", "Profile"], ["rear", "¾ rear"]];
 const LOC_ANGLES = [["frontal", "Establishing"], ["q45", "45° left"], ["profile", "Cross view"], ["rear", "Reverse"]];
-const QA = [["silhouette", "Form & silhouette"], ["wardrobe", "Material & wardrobe"], ["features", "Fingerprint features present"], ["style", "Style coherent"], ["scale", "Scale correct"]];
+const QA_BY_TYPE = {
+  character: [["silhouette", "Form & silhouette"], ["wardrobe", "Material & wardrobe"], ["features", "Fingerprint features present"], ["style", "Style coherent"], ["scale", "Scale correct"]],
+  prop: [["silhouette", "Shape & geometry exact"], ["wardrobe", "Material & finish match"], ["features", "Key features present"], ["style", "Style coherent"], ["scale", "Scale correct"]],
+  location: [["silhouette", "Layout matches establishing plate"], ["wardrobe", "Materials & fixtures match"], ["features", "Key features present"], ["style", "Lighting & style coherent"], ["scale", "No people, scale correct"]],
+  presence: [["silhouette", "Manifestation matches baseline"], ["wardrobe", "Only the state changed"], ["features", "Behaviour rules respected"], ["style", "Style coherent"], ["scale", "No faces, bodies or eyes"]],
+};
 
 export default function Elements() {
   return (
@@ -98,6 +103,7 @@ function ElementEditor() {
   const ttsModel = (models.tts || []).find((m) => m.id === (el.voice?.model || project.defaults.ttsModel));
   const isPresence = el.type === "presence";
   const isLocation = el.type === "location";
+  const QA = QA_BY_TYPE[el.type] || QA_BY_TYPE.character;
   const SLOTS = isPresence ? (el.states || []).map((s, i) => [i === 0 ? "frontal" : s.key, s.name]) : isLocation ? LOC_ANGLES : ANGLES;
   const anglesDone = SLOTS.filter(([a]) => el.angles?.[a]).length;
   const qaPassed = SLOTS.filter(([a]) => el.qa?.[a]?.verdict === "pass").length;
