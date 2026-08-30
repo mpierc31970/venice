@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import { readJson, writeJson, P, slugify, httpError, exists } from "../lib/store.js";
 import { imageGenerate, imageEdit } from "../venice.js";
 import { completeJson } from "../lib/llm.js";
-import { elementSystem, referencePrompt, editAnglePrompt, ANGLE_INSTRUCTIONS } from "../lib/prompts.js";
+import { elementSystem, referencePrompt, editAnglePrompt, ANGLE_INSTRUCTIONS, presenceReferencePrompt, editStatePrompt } from "../lib/prompts.js";
 import { loadCanon, loadElements } from "../lib/canon.js";
 import { saveBase64, saveBuffer, toDataUrl, stamp } from "../lib/media.js";
 import { model as getModel } from "../lib/modelcache.js";
@@ -45,6 +45,7 @@ r.patch("/:slug", async (req, res, next) => {
     const { dir } = req.proj;
     const el = await getEl(dir, req.params.slug);
     const next_ = { ...el, ...req.body, voice: { ...el.voice, ...(req.body.voice || {}) } };
+    if (Array.isArray(req.body.states)) next_.states = req.body.states.map((s, i) => ({ key: slugify(s.key || s.name || `state-${i + 1}`), name: s.name || s.key, description: s.description || "" }));
     await saveEl(dir, req.params.slug, next_);
     res.json(next_);
   } catch (e) { next(e); }
@@ -71,6 +72,7 @@ r.post("/:slug/draft", async (req, res, next) => {
       user: `Element name: ${el.name}\nType: ${el.type}\nRole: ${el.role || ""}\nExisting bio: ${el.bio || ""}\nExisting fingerprint: ${(el.fingerprint || []).join("; ")}\nExisting description: ${el.description || ""}\nCreator notes: ${req.body?.notes || ""}`,
     });
     const next_ = { ...el, bio: data.bio ?? el.bio, fingerprint: data.fingerprint ?? el.fingerprint, description: data.description ?? el.description, negatives: data.negatives ?? el.negatives, voiceHint: data.voiceHint ?? el.voiceHint };
+    if (el.type === "presence" && Array.isArray(data.states) && data.states.length) next_.states = data.states.slice(0, 4).map((s, i) => ({ key: slugify(s.key || s.name || `state-${i + 1}`), name: s.name || s.key, description: s.description || "" }));
     await saveEl(dir, el.slug, next_);
     res.json(next_);
   } catch (e) { next(e); }
@@ -124,9 +126,11 @@ r.post("/:slug/board", async (req, res, next) => {
     const m = await getModel(modelId);
     if (!m) throw httpError(400, "Unknown image model " + modelId);
     const canon = await loadCanon(dir);
-    const prompt = referencePrompt({ worldSeed: canon.worldSeed, description: el.description, angle: "frontal", type: el.type });
+    const isPresence = el.type === "presence";
+    if (isPresence && !el.states?.length) throw httpError(400, "Draft the presence first so it has states");
+    const prompt = isPresence ? presenceReferencePrompt({ worldSeed: canon.worldSeed, description: el.description, state: el.states[0] }) : referencePrompt({ worldSeed: canon.worldSeed, description: el.description, angle: "frontal", type: el.type });
     const negative = [canon.hardNegatives, el.negatives].filter(Boolean).join(", ");
-    const aspect = req.body?.aspect || (el.type === "location" ? project.defaults.aspect : "3:4");
+    const aspect = req.body?.aspect || (el.type === "location" || isPresence ? project.defaults.aspect : "3:4");
     const results = [];
     for (let i = 0; i < count; i++) {
       const seed = req.body?.seedMode === "fixed" ? el.seed + i : Math.floor(Math.random() * 1e9);
@@ -150,7 +154,7 @@ r.post("/:slug/import", async (req, res, next) => {
     const { name = "", data, angle } = req.body || {};
     if (!data) throw httpError(400, "data required");
     const ext = (path.extname(name) || ".png").toLowerCase();
-    if (angle && ANGLE_INSTRUCTIONS[angle]) {
+    if (angle && (ANGLE_INSTRUCTIONS[angle] || (el.states || []).some((s) => s.key === angle))) {
       const abs = path.join(P.elementDir(dir, el.slug), "angles", `${angle}-import-${stamp()}${ext}`);
       await saveBase64(abs, data);
       el.angles[angle] = { file: rel(dir, abs), model: "imported", prompt: "", source: name }; el.qa[angle] = null;
@@ -184,14 +188,17 @@ r.post("/:slug/angles", async (req, res, next) => {
     const { dir, project } = req.proj;
     const el = await getEl(dir, req.params.slug);
     if (!el.angles?.frontal) throw httpError(400, "Pick a frontal reference first");
-    const angles = req.body?.angles || ["q45", "profile", "rear"];
+    const isPresence = el.type === "presence";
+    const stateKeys = isPresence ? (el.states || []).slice(1).map((s) => s.key) : null;
+    const angles = req.body?.angles || (isPresence ? stateKeys : ["q45", "profile", "rear"]);
     const editModel = req.body?.editModel || project.defaults.editModel;
     const frontal = await toDataUrl(path.join(dir, el.angles.frontal.file));
     const errors = [];
     for (const a of angles) {
-      if (!ANGLE_INSTRUCTIONS[a]) continue;
+      const state = isPresence ? (el.states || []).find((s) => s.key === a) : null;
+      if (!(isPresence ? state : ANGLE_INSTRUCTIONS[a])) continue;
       try {
-        const prompt = editAnglePrompt({ description: el.description, angle: a });
+        const prompt = isPresence ? editStatePrompt({ description: el.description, state }) : editAnglePrompt({ description: el.description, angle: a });
         const out = await imageEdit({ model: editModel, image: frontal, prompt, output_format: "png", safe_mode: !!project.defaults.safeMode });
         const abs = path.join(P.elementDir(dir, el.slug), "angles", `${a}-${stamp()}.png`);
         if (out.buffer) await saveBuffer(abs, out.buffer);

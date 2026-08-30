@@ -56,7 +56,7 @@ export const EXTRACT_SYSTEM = `You extract structured data from a story bible. R
   "locations": [ { "name": string, "description": string } ]
 }`;
 
-export const elementSystem = (type) => `You write production-ready descriptions for a ${type} in an AI-generated film.
+export const elementSystem = (type) => type === "presence" ? PRESENCE_SYSTEM : `You write production-ready descriptions for a ${type} in an AI-generated film.
 Use the story bible canon supplied. Return ONLY JSON:
 {
   "bio": string,                  // for characters: 3-5 sentence biography; for props/locations: purpose and history
@@ -65,6 +65,23 @@ Use the story bible canon supplied. Return ONLY JSON:
   "negatives": string,            // comma-separated things that must never appear for this element
   "voiceHint": string             // characters only: age, accent, texture, pace
 }`;
+
+export const PRESENCE_SYSTEM = `You define a PRESENCE for an AI-generated film: a non-human entity with no body, whose identity is a set of
+visual STATES (how it manifests: light, weather, sound made visible, a pattern in the environment). Use the story bible canon.
+Return ONLY JSON:
+{
+  "bio": string,                 // what it is, what it wants, how it acts on the world (3-5 sentences)
+  "fingerprint": [string],       // 3-5 never-drift rules of its manifestation (e.g. "flare only from the lens", "never red")
+  "description": string,         // ONE dense paragraph, present tense: the physical manifestation in its baseline state — color temperature (hex), halo shape, texture, rhythm, scale, where it lives in the frame. Pasted verbatim into every prompt.
+  "negatives": string,           // comma-separated things that must never appear (faces, bodies, eyes, tentacles, cartoon glow...)
+  "states": [ { "key": string (slug), "name": string, "description": string } ]   // exactly 4 states, ordered from baseline to most intense; each description says ONLY what changes from baseline
+}`;
+
+export const presenceReferencePrompt = ({ worldSeed, description, state }) =>
+  `${worldSeed}\n\nEnvironmental plate, no people, no faces, no figures. ${description}\n\nSTATE — ${state.name}: ${state.description}`;
+
+export const editStatePrompt = ({ description, state }) =>
+  `Same scene, same composition, same lighting rig and materials. ${description} Now show STATE — ${state.name}: ${state.description}. Change nothing else.`;
 
 export const ANGLE_INSTRUCTIONS = {
   frontal: "frontal view, facing camera directly, neutral expression, full body visible, centered",

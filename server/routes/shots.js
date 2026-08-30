@@ -154,16 +154,19 @@ async function buildVideoRequest(dir, project, shot, overrides = {}) {
   const isR2V = /reference-to-video/.test(modelId);
   const isI2V = c.model_type === "image-to-video" || /image-to-video|first-last-frame/.test(modelId);
   if (shot.keyframe && (isI2V || isR2V)) { body.image_url = await toDataUrl(inside(dir, shot.keyframe)); refs.keyframe = shot.keyframe; }
+  const presences = chars.filter((c) => c.type === "presence");
   if (isR2V) {
     const elements = [];
-    for (const ch of chars.slice(0, 4)) {
+    for (const ch of chars.filter((c) => c.type !== "presence").slice(0, 4)) {
       if (!ch.angles?.frontal) continue;
       const extra = ["q45", "profile", "rear"].map((a) => ch.angles?.[a]?.file).filter(Boolean).slice(0, 3);
       elements.push({ frontal_image_url: await toDataUrl(inside(dir, ch.angles.frontal.file)), reference_image_urls: await Promise.all(extra.map((f) => toDataUrl(inside(dir, f)))) });
       refs.elements.push({ slug: ch.slug, frontal: ch.angles.frontal.file, extra });
     }
     if (elements.length) body.elements = elements;
-    const plates = (shot.plates || []).slice(0, 4);
+    // Presence state images act as scene references (their identity is environmental, not a body).
+    const presencePlates = presences.flatMap((p) => Object.values(p.angles || {}).map((a) => a.file).filter(Boolean)).slice(0, 2);
+    const plates = [...(shot.plates || []), ...presencePlates].slice(0, 4);
     if (plates.length) { body.scene_image_urls = await Promise.all(plates.map((p) => toDataUrl(inside(dir, p)))); refs.plates = plates; }
     // Fallback for R2V models that don't use elements: flat reference list
     if (!elements.length) {

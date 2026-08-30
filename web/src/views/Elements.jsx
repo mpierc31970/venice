@@ -44,7 +44,7 @@ function ElementList() {
               <div className="grow"><div style={{ fontWeight: 500 }}>{e.name} <span className="dim small">· {e.type}</span></div><div className="dim small">{e.role || e.bio?.slice(0, 90) || "—"}</div></div>
               <div className="row">
                 {e.description ? <span className="chip ok">described</span> : <span className="chip">no description</span>}
-                {["frontal", "q45", "profile", "rear"].filter((a) => e.angles?.[a]).length ? <span className="chip info">{["frontal", "q45", "profile", "rear"].filter((a) => e.angles?.[a]).length}/4 angles</span> : null}
+                {Object.keys(e.angles || {}).length ? <span className="chip info">{Object.keys(e.angles || {}).length}/4 {e.type === "presence" ? "states" : "angles"}</span> : null}
                 {e.type === "character" ? (e.voice?.voice || e.voice?.vvId ? <span className="chip ok">voice</span> : <span className="chip">no voice</span>) : null}
                 {e.locked ? <span className="chip accent">locked</span> : null}
               </div>
@@ -55,7 +55,7 @@ function ElementList() {
       </div>
       <div className="card">
         <h3>Add an element</h3>
-        <div className="row"><input className="grow" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} /><select style={{ width: 160 }} value={type} onChange={(e) => setType(e.target.value)}><option value="character">Character</option><option value="prop">Prop</option><option value="location">Location</option></select><Button className="primary" onClick={add} disabled={!name}>Add</Button></div>
+        <div className="row"><input className="grow" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} /><select style={{ width: 160 }} value={type} onChange={(e) => setType(e.target.value)}><option value="character">Character</option><option value="presence">Presence (non-human, no body)</option><option value="prop">Prop</option><option value="location">Location</option></select><Button className="primary" onClick={add} disabled={!name}>Add</Button></div>
       </div>
     </div>
   );
@@ -77,7 +77,7 @@ function ElementEditor() {
   if (!el) return <div className="page"><p>Element not found. <Link to="..">Back</Link></p></div>;
 
   const call = async (key, fn, okMsg) => { setBusy(key); try { const r = await fn(); await reload(); refreshBilling(); if (okMsg) toast(okMsg, "ok"); return r; } catch (e) { toast(e.message, "error"); } finally { setBusy(null); } };
-  const save = () => call("save", () => api.patch(`/api/projects/${id}/elements/${slug}`, { name: el.name, role: el.role, bio: el.bio, fingerprint: el.fingerprint, description: el.description, negatives: el.negatives, voiceHint: el.voiceHint, voice: el.voice, imageModel }), "Saved");
+  const save = () => call("save", () => api.patch(`/api/projects/${id}/elements/${slug}`, { name: el.name, type: el.type, role: el.role, bio: el.bio, fingerprint: el.fingerprint, description: el.description, negatives: el.negatives, voiceHint: el.voiceHint, voice: el.voice, imageModel, states: el.states }), "Saved");
   const draft = () => call("draft", () => api.post(`/api/projects/${id}/elements/${slug}/draft`, {}), "Claude drafted the bio, fingerprint and verbatim description.");
   const board = () => call("board", async () => { await api.patch(`/api/projects/${id}/elements/${slug}`, { description: el.description, negatives: el.negatives }); return api.post(`/api/projects/${id}/elements/${slug}/board`, { count: boardCount, model: imageModel || undefined, seedMode: "random" }); }, `Generated ${boardCount} candidate(s). Pick the one face you'll anchor everything to.`);
   const pick = (file) => call("pick", () => api.post(`/api/projects/${id}/elements/${slug}/pick`, { file }), "Frontal chosen. Now derive the other three angles.");
@@ -95,9 +95,12 @@ function ElementEditor() {
   const clone = async (file) => { if (!file) return; setBusy("clone"); try { const data = await fileToBase64(file); const r = await api.post(`/api/projects/${id}/tts/clone`, { slug, name: el.name, data, filename: file.name, model: el.voice?.model || project.defaults.ttsModel }); await reload(); toast(`Cloned voice: ${r.element.voice.vvId || "(see console)"}`, "ok"); } catch (e) { toast(e.message, "error"); } finally { setBusy(null); } };
 
   const ttsModel = (models.tts || []).find((m) => m.id === (el.voice?.model || project.defaults.ttsModel));
-  const anglesDone = ANGLES.filter(([a]) => el.angles?.[a]).length;
-  const qaPassed = ANGLES.filter(([a]) => el.qa?.[a]?.verdict === "pass").length;
-  const isChar = el.type === "character";
+  const isPresence = el.type === "presence";
+  const SLOTS = isPresence ? (el.states || []).map((s, i) => [i === 0 ? "frontal" : s.key, s.name]) : ANGLES;
+  const anglesDone = SLOTS.filter(([a]) => el.angles?.[a]).length;
+  const qaPassed = SLOTS.filter(([a]) => el.qa?.[a]?.verdict === "pass").length;
+  const isChar = el.type === "character" || isPresence;
+  const wideRef = el.type === "location" || isPresence;
   const imgModel = (models.image || []).find((m) => m.id === (imageModel || project.defaults.imageModel));
   const perImage = imgModel?.pricing?.resolutions?.[project.defaults.resolution]?.usd ?? imgModel?.pricing?.usd ?? null;
 
@@ -111,40 +114,54 @@ function ElementEditor() {
           <div className="field"><label>Name</label><input value={el.name} onChange={(e) => setEl({ ...el, name: e.target.value })} /></div>
           <div className="field"><label>Role</label><input value={el.role || ""} onChange={(e) => setEl({ ...el, role: e.target.value })} /></div>
         </div>
-        <ImproveField label={isChar ? "Biography" : "Purpose & history"} kind="bio" rows={3} value={el.bio} onChange={(v) => setEl({ ...el, bio: v })} />
-        <div className="field"><label>Identity fingerprint — 3–5 never-drift features (one per line)</label><textarea rows={3} value={(el.fingerprint || []).join("\n")} onChange={(e) => setEl({ ...el, fingerprint: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })} placeholder={"brass compass on a leather cord\nleft eyebrow scar\nclose-cropped grey hair"} /></div>
-        <ImproveField label="Verbatim description (pasted unchanged into every prompt)" kind="description" rows={5} value={el.description} onChange={(v) => setEl({ ...el, description: v })} hint="The model treats 'red jacket' and 'crimson coat' as different subjects. Lock this wording and never retype it." />
+        <div className="field" style={{ maxWidth: 320 }}><label>Type</label><select value={el.type} onChange={(e) => setEl({ ...el, type: e.target.value })}><option value="character">Character</option><option value="presence">Presence (non-human, no body)</option><option value="prop">Prop</option><option value="location">Location</option></select></div>
+        <ImproveField label={isPresence ? "What it is and what it wants" : isChar ? "Biography" : "Purpose & history"} kind="bio" rows={3} value={el.bio} onChange={(v) => setEl({ ...el, bio: v })} />
+        <div className="field"><label>{isPresence ? "Behaviour rules — 3–5 never-drift rules of how it manifests (one per line)" : "Identity fingerprint — 3–5 never-drift features (one per line)"}</label><textarea rows={3} value={(el.fingerprint || []).join("\n")} onChange={(e) => setEl({ ...el, fingerprint: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })} placeholder={"brass compass on a leather cord\nleft eyebrow scar\nclose-cropped grey hair"} /></div>
+        <ImproveField label={isPresence ? "Verbatim manifestation — baseline state (pasted unchanged into every prompt)" : "Verbatim description (pasted unchanged into every prompt)"} kind="description" rows={5} value={el.description} onChange={(v) => setEl({ ...el, description: v })} hint="The model treats 'red jacket' and 'crimson coat' as different subjects. Lock this wording and never retype it." />
+        {isPresence ? (
+          <div className="field"><label>States — 4, from baseline to most intense (Claude drafts them from the bible)</label>
+            <div className="stack">
+              {(el.states || []).map((s, i) => (
+                <div className="row top" key={i}>
+                  <input style={{ width: 160 }} value={s.name} placeholder="name" onChange={(e) => setEl({ ...el, states: el.states.map((x, j) => (j === i ? { ...x, name: e.target.value, key: x.key || e.target.value } : x)) })} />
+                  <textarea className="grow" rows={2} value={s.description} placeholder="what changes from baseline" onChange={(e) => setEl({ ...el, states: el.states.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)) })} />
+                </div>
+              ))}
+              {(el.states || []).length < 4 ? <Button className="ghost xs" onClick={() => setEl({ ...el, states: [...(el.states || []), { key: "", name: "", description: "" }] })}>+ state</Button> : null}
+            </div>
+          </div>
+        ) : null}
         <ImproveField label="Element negatives (comma-separated)" kind="generic" single value={el.negatives} onChange={(v) => setEl({ ...el, negatives: v })} />
         <div className="row"><Button className="primary" busy={busy === "save"} onClick={save}>Save</Button></div>
       </div>
 
       <div className="card">
-        <header><h2>B · Identity board → one winning face</h2><span className="grow" /><span className="dim small">{perImage != null ? `≈ ${money(perImage)} / image` : ""}</span></header>
-        <p className="muted">Generate frontal candidates with the verbatim description. Pick ONE. Everything downstream anchors to it. (Don't generate pretty world shots first — you'll fall for off-canon faces.)</p>
+        <header><h2>{isPresence ? "B · Manifestation board → one baseline plate" : "B · Identity board → one winning face"}</h2><span className="grow" /><span className="dim small">{perImage != null ? `≈ ${money(perImage)} / image` : ""}</span></header>
+        <p className="muted">{isPresence ? "Generate baseline-state plates of the manifestation (no people). Pick ONE; every other state is derived from it so the environment stays identical." : "Generate frontal candidates with the verbatim description. Pick ONE. Everything downstream anchors to it. (Don't generate pretty world shots first — you'll fall for off-canon faces.)"}</p>
         <div className="row">
           <ModelPicker type="image" value={imageModel} onChange={setImageModel} allowEmpty small filter={(m) => !/bg-remover|upscal|edit/.test(m.id)} />
           <select style={{ width: 120 }} value={boardCount} onChange={(e) => setBoardCount(Number(e.target.value))}>{[1, 2, 4, 6, 8, 12].map((n) => <option key={n} value={n}>{n} image{n > 1 ? "s" : ""}</option>)}</select>
-          <Button className="primary" busy={busy === "board"} onClick={board} disabled={!el.description}>Generate candidates{perImage != null ? ` (≈${money(perImage * boardCount)})` : ""}</Button>
+          <Button className="primary" busy={busy === "board"} onClick={board} disabled={!el.description || (isPresence && !(el.states || []).length)}>Generate candidates{perImage != null ? ` (≈${money(perImage * boardCount)})` : ""}</Button>
           <ImportButton label="Import my own image ($0)" accept="image/*" onFile={async (f) => { await call("import", async () => api.post(`/api/projects/${id}/elements/${slug}/import`, { name: f.name, data: await fileToBase64(f) }), "Added to the board — click it to make it the frontal."); }} />
         </div>
         {el.board?.length ? (
           <div className="thumbs">
-            {el.board.map((b) => <Thumb key={b.file} src={media(id, b.file)} selected={el.angles?.frontal?.file === b.file} onClick={() => pick(b.file)} caption={`seed ${b.seed}`} wide={el.type === "location"} />)}
+            {el.board.map((b) => <Thumb key={b.file} src={media(id, b.file)} selected={el.angles?.frontal?.file === b.file} onClick={() => pick(b.file)} caption={`seed ${b.seed}`} wide={wideRef} />)}
           </div>
         ) : <p className="dim small">No candidates yet.</p>}
       </div>
 
       <div className="card">
-        <header><h2>C · Four locked angles</h2><span className="grow" /><span className="chip">{anglesDone}/4 angles · {qaPassed} QA passed</span></header>
-        <p className="muted">Derived from the winning frontal with the identical description — only the angle instruction changes. Score each: fail 2+ checks → regenerate that angle; 3+ angles failing → go back to B.</p>
-        <div className="row"><Button className="primary" busy={busy === "angles"} onClick={angles} disabled={!el.angles?.frontal}>Derive 45° / profile / ¾ rear</Button><span className="dim small">edit model: {project.defaults.editModel}</span></div>
+        <header><h2>{isPresence ? "C · Four locked states" : "C · Four locked angles"}</h2><span className="grow" /><span className="chip">{anglesDone}/{SLOTS.length || 4} {isPresence ? "states" : "angles"} · {qaPassed} QA passed</span></header>
+        <p className="muted">{isPresence ? "Each state is derived from the baseline plate with the identical manifestation text — only the state clause changes. Score each; fail 2+ checks → regenerate that state." : "Derived from the winning frontal with the identical description — only the angle instruction changes. Score each: fail 2+ checks → regenerate that angle; 3+ angles failing → go back to B."}</p>
+        <div className="row"><Button className="primary" busy={busy === "angles"} onClick={angles} disabled={!el.angles?.frontal}>{isPresence ? "Derive the other states" : "Derive 45° / profile / ¾ rear"}</Button><span className="dim small">edit model: {project.defaults.editModel}</span></div>
         <div className="angles">
-          {ANGLES.map(([a, label]) => {
+          {SLOTS.map(([a, label]) => {
             const ang = el.angles?.[a]; const q = el.qa?.[a];
             return (
               <div className="slot" key={a}>
                 <div className="name">{label}</div>
-                {ang ? <Thumb src={media(id, ang.file)} wide={el.type === "location"} /> : <Empty wide={el.type === "location"}><span>{a === "frontal" ? "pick from the board" : "not derived yet"}<br /><ImportButton className="xs ghost" label="Import" accept="image/*" onFile={async (f) => { await call("import-" + a, async () => api.post(`/api/projects/${id}/elements/${slug}/import`, { name: f.name, data: await fileToBase64(f), angle: a }), `Imported ${label}.`); }} /></span></Empty>}
+                {ang ? <Thumb src={media(id, ang.file)} wide={wideRef} /> : <Empty wide={wideRef}><span>{a === "frontal" ? "pick from the board" : "not derived yet"}<br /><ImportButton className="xs ghost" label="Import" accept="image/*" onFile={async (f) => { await call("import-" + a, async () => api.post(`/api/projects/${id}/elements/${slug}/import`, { name: f.name, data: await fileToBase64(f), angle: a }), `Imported ${label}.`); }} /></span></Empty>}
                 {ang ? (
                   <div className="stack" style={{ gap: 4 }}>
                     {QA.map(([k, lbl]) => <label key={k} style={{ display: "flex", gap: 6, alignItems: "center", margin: 0, fontSize: 11.5 }}><input type="checkbox" style={{ width: "auto" }} checked={q?.checks?.[k] === true} onChange={(e) => qa(a, k, e.target.checked)} />{lbl}</label>)}
@@ -158,13 +175,13 @@ function ElementEditor() {
           })}
         </div>
         <div className="row">
-          {el.locked ? <Button className="sm" busy={busy === "lock"} onClick={() => lock(false)}>Unlock</Button> : <Button className="primary" busy={busy === "lock"} onClick={() => lock(true)} disabled={!el.angles?.frontal}>Lock {el.name} {anglesDone < 4 ? `(only ${anglesDone}/4 angles — allowed, but consistency suffers)` : ""}</Button>}
+          {el.locked ? <Button className="sm" busy={busy === "lock"} onClick={() => lock(false)}>Unlock</Button> : <Button className="primary" busy={busy === "lock"} onClick={() => lock(true)} disabled={!el.angles?.frontal}>Lock {el.name} {anglesDone < SLOTS.length ? `(only ${anglesDone}/${SLOTS.length} — allowed, but consistency suffers)` : ""}</Button>}
         </div>
       </div>
 
       {isChar ? (
         <div className="card">
-          <header><h2>D · Voice</h2><span className="grow" /><span className="dim small">{el.voiceHint}</span></header>
+          <header><h2>D · Voice{isPresence ? " (optional — only if it ever speaks)" : ""}</h2><span className="grow" /><span className="dim small">{el.voiceHint}</span></header>
           <div className="grid2">
             <ModelPicker label="TTS model" type="tts" value={el.voice?.model || project.defaults.ttsModel} onChange={(v) => setEl({ ...el, voice: { ...el.voice, model: v, voice: null } })} />
             <div className="field"><label>Voice</label>

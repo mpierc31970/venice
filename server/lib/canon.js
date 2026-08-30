@@ -29,7 +29,9 @@ export async function loadCanon(dir, { bibleChars = 6000 } = {}) {
 }
 
 export const elementBlock = (e) =>
-  `### ${e.name} (${e.type})\nFingerprint: ${(e.fingerprint || []).join("; ")}\nVerbatim description: ${e.description || "(none yet)"}`;
+  e.type === "presence"
+    ? `### ${e.name} (presence — non-human, no body; describe it ONLY through its manifestation)\nBehaviour rules: ${(e.fingerprint || []).join("; ")}\nVerbatim manifestation: ${e.description || "(none yet)"}\nStates: ${(e.states || []).map((s) => `${s.name} = ${s.description}`).join(" | ") || "(none yet)"}`
+    : `### ${e.name} (${e.type})\nFingerprint: ${(e.fingerprint || []).join("; ")}\nVerbatim description: ${e.description || "(none yet)"}`;
 
 export const findElement = (elements, name) =>
   elements.find((e) => e.name.toLowerCase() === String(name).toLowerCase()) ||
