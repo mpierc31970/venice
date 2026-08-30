@@ -142,7 +142,11 @@ async function buildVideoRequest(dir, project, shot, overrides = {}) {
   }
   const body = { model: modelId, prompt: (overrides.prompt || shot.videoPrompt || shot.action).slice(0, c.prompt_character_limit || 2000), duration };
   if (c.aspect_ratios?.length) body.aspect_ratio = c.aspect_ratios.includes(project.defaults.aspect) ? project.defaults.aspect : c.aspect_ratios[0];
-  if (c.resolutions?.length) body.resolution = c.resolutions.includes(overrides.resolution || project.defaults.videoResolution) ? (overrides.resolution || project.defaults.videoResolution) : c.resolutions[0];
+  if (c.resolutions?.length) {
+    const want = overrides.resolution || project.defaults.videoResolution;
+    const px = (r) => (/4k/i.test(r) ? 2160 : /2k/i.test(r) ? 1440 : parseInt(r) || 720);
+    body.resolution = c.resolutions.includes(want) ? want : c.resolutions.slice().sort((a, b) => Math.abs(px(a) - px(want)) - Math.abs(px(b) - px(want)))[0];
+  }
   if (c.audio_configurable) body.audio = overrides.audio ?? true;
   const { canon, chars } = await contextFor(dir, shot);
   if (canon.hardNegatives) body.negative_prompt = canon.hardNegatives;
