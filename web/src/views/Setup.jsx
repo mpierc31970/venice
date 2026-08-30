@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useProject, useStudio } from "../lib/store.jsx";
 import { Button, ImproveField, ModelPicker, StepHead } from "../components/ui.jsx";
+import { api } from "../lib/api.js";
 
 const ASPECTS = ["16:9", "9:16", "1:1", "21:9", "4:3", "3:2"];
 
@@ -10,6 +11,8 @@ export default function Setup() {
   const [f, setF] = useState({ title: project.title, logline: project.logline || "", defaults: project.defaults });
   const [busy, setBusy] = useState(false);
   useEffect(() => setF({ title: project.title, logline: project.logline || "", defaults: project.defaults }), [project]);
+  const [providers, setProviders] = useState([]);
+  useEffect(() => { api.get("/api/providers").then(setProviders).catch(() => {}); }, []);
   const d = f.defaults;
   const setD = (k, v) => setF({ ...f, defaults: { ...d, [k]: v } });
   const save = async () => { setBusy(true); try { await patchProject(f); toast("Saved", "ok"); } catch (e) { toast(e.message, "error"); } finally { setBusy(false); } };
@@ -30,8 +33,12 @@ export default function Setup() {
       <div className="card">
         <h2>Default models</h2>
         <p className="muted">Lists come live from Venice. Claude does all the writing; pick your image, video and voice engines by taste — step 3 has a bake-off to compare image models on one prompt.</p>
+        <div className="row" style={{ gap: 6 }}>
+          {providers.map((p) => <span key={p.id} className={`chip ${p.configured ? (p.paid ? "info" : "ok") : ""}`} title={p.note}>{p.label}: {p.configured ? (p.paid ? "paid" : "free tier") : "not configured"}</span>)}
+        </div>
+        <p className="dim small">Text models come from every configured provider (add GEMINI_API_KEY / OPENAI_API_KEY to .env). Every ✦ button also has a <b>manual</b> mode: copy the prompt into ChatGPT / Gemini and paste the answer back — $0.</p>
         <div className="grid2">
-          <ModelPicker label="Writing (Claude, via Venice)" type="text" value={d.textModel} onChange={(v) => setD("textModel", v)} />
+          <ModelPicker label="Writing model" type="text" value={d.textModel} onChange={(v) => setD("textModel", v)} />
           <ModelPicker label="Images (references & keyframes)" type="image" value={d.imageModel} onChange={(v) => setD("imageModel", v)} filter={(m) => !/bg-remover|upscal/.test(m.id)} />
           <ModelPicker label="Image edit (deriving angles from the frontal)" type="image" value={d.editModel} onChange={(v) => setD("editModel", v)} filter={(m) => /edit/.test(m.id)} />
           <ModelPicker label="Video" type="video" value={d.videoModel} onChange={(v) => setD("videoModel", v)} filter={(m) => !/upscale|motion-control/.test(m.id)} />

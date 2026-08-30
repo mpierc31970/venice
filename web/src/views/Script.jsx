@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api, stream } from "../lib/api.js";
 import { useProject, useStudio } from "../lib/store.jsx";
 import { Button, ImproveField, ModelPicker, StepHead } from "../components/ui.jsx";
+import { ClaudeAction } from "../components/manual.jsx";
 
 export default function Script() {
   const { id, project, script, elements, reload } = useProject();
@@ -49,12 +50,12 @@ export default function Script() {
       <div className="card">
         <header><h2>1 · Screenplay</h2><span className="grow" />{dirty ? <span className="chip warn">unsaved</span> : null}<Button className="sm" busy={busy === "save"} onClick={save} disabled={!dirty}>Save</Button></header>
         <ImproveField label="Notes for Claude (optional)" kind="generic" rows={2} value={notes} onChange={setNotes} placeholder="Length, structure, a scene you must have, an ending…" />
-        <div className="row"><Button className="claude" busy={busy === "gen"} onClick={gen} disabled={!chars.length}>✦ {text ? "Rewrite screenplay" : "Write screenplay"}</Button>{!chars.length ? <span className="dim small">Needs at least one character (step 3).</span> : <span className="dim small">Uses the bible, world seed and every character's verbatim description.</span>}</div>
+        <div className="row top"><ClaudeAction url={`/api/projects/${id}/script/screenplay`} body={{ notes, model: model || undefined }} isStream label={text ? "Rewrite screenplay" : "Write screenplay"} busy={busy === "gen"} onRun={gen} onApplied={reload} disabled={!chars.length} />{!chars.length ? <span className="dim small">Needs at least one character (step 3).</span> : <span className="dim small">Uses the bible, world seed and every character's verbatim description.</span>}</div>
         <textarea className="mono" rows={18} value={text} onChange={(e) => { setText(e.target.value); setDirty(true); }} placeholder="INT. LIGHTHOUSE — NIGHT…" />
       </div>
 
       <div className="card">
-        <header><h2>2 · Scenes</h2><span className="grow" /><Button className="claude" busy={busy === "scenes"} onClick={breakdown} disabled={!text.trim()}>✦ Break into scenes</Button></header>
+        <header><h2>2 · Scenes</h2><span className="grow" /><ClaudeAction url={`/api/projects/${id}/script/scenes`} body={{ model: model || undefined }} label="Break into scenes" busy={busy === "scenes"} onRun={breakdown} onApplied={reload} disabled={!text.trim()} /></header>
         {!scenes.length ? <p className="dim">No scenes yet.</p> : scenes.map((s, i) => (
           <div key={s.id} className="card" style={{ background: "var(--bg-2)" }}>
             <header style={{ cursor: "pointer" }} onClick={() => setOpen(open === s.id ? null : s.id)}>
@@ -84,7 +85,7 @@ export default function Script() {
                 <hr />
                 <div className="row">
                   <ModelPicker type="video" value={s.videoModel || project.defaults.videoModel} onChange={(v) => setScene(i, { videoModel: v })} small filter={(m) => !/upscale|motion-control/.test(m.id)} />
-                  <Button className="claude" busy={busy === "shots-" + s.id} onClick={() => shotlist(s.id, s.videoModel)}>✦ {s.shots?.length ? "Rebuild shot list" : "Build shot list"}</Button>
+                  <ClaudeAction url={`/api/projects/${id}/script/scenes/${s.id}/shotlist`} body={{ model: model || undefined, videoModel: s.videoModel }} label={s.shots?.length ? "Rebuild shot list" : "Build shot list"} busy={busy === "shots-" + s.id} onRun={() => shotlist(s.id, s.videoModel)} onApplied={reload} />
                   <span className="dim small">Durations are matched to this video model's ladder.</span>
                 </div>
                 {s.shots?.length ? <ShotTable sid={s.id} /> : null}

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api.js";
 import { useStudio, useProject, STEPS } from "../lib/store.jsx";
+import { copyPrompt } from "./manual.jsx";
 
 export const Spinner = () => <span className="spin" aria-label="loading" />;
 
@@ -49,8 +50,9 @@ export function ModelPicker({ type, value, onChange, filter, allowEmpty, label, 
     let l = models[type] || [];
     if (filter) l = l.filter(filter);
     if (type === "text") {
-      // Claude first — that's the app's brain.
-      l = [...l].sort((a, b) => (b.id.startsWith("claude") - a.id.startsWith("claude")) || a.id.localeCompare(b.id));
+      // Free providers first, then Claude, then the rest.
+      const rank = (m) => (m.paid === false ? 0 : /claude/.test(m.id) ? 1 : 2);
+      l = [...l].sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id));
     }
     return l;
   }, [models, type, filter]);
@@ -67,7 +69,7 @@ export function ModelPicker({ type, value, onChange, filter, allowEmpty, label, 
 function labelFor(m) {
   const c = m.constraints || {};
   const bits = [];
-  if (m.id.startsWith("claude")) bits.push("Claude");
+  if (m.type === "text") { if (m.providerLabel) bits.push(m.providerLabel.split(" (")[0]); bits.push(m.paid === false ? "FREE tier" : "paid"); }
   if (m.type === "video") { if (c.model_type) bits.push(c.model_type.replace(/-/g, " ")); if (c.durations?.length) bits.push(`${c.durations[0]}–${c.durations[c.durations.length - 1]}`); if (c.audio) bits.push("audio"); }
   if (m.type === "image" && m.pricing?.resolutions?.["1K"]?.usd) bits.push(`$${m.pricing.resolutions["1K"].usd}/img`);
   if (m.type === "tts" && m.voices) bits.push(`${m.voices.length} voices`);
@@ -84,6 +86,9 @@ export function ImproveField({ label, value, onChange, kind = "generic", context
   const { toast } = useStudio();
   const [busy, setBusy] = useState(false);
   const [proposal, setProposal] = useState(null);
+  const [manual, setManual] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const copy = async () => { if (!value?.trim()) return toast("Write something first.", "info"); setBusy(true); try { await copyPrompt(`/api/projects/${id}/bible/improve`, { kind, text: value, context }); toast("Prompt copied — paste into ChatGPT/Gemini, then paste the answer here.", "ok", 7000); } catch (e) { toast(e.message, "error"); } finally { setBusy(false); } };
   const improve = async () => {
     if (!value?.trim()) return toast("Write something first, then improve it.", "info");
     setBusy(true);
@@ -96,7 +101,15 @@ export function ImproveField({ label, value, onChange, kind = "generic", context
         <label>{label}</label>
         <span className="grow" />
         <Button className="claude xs" onClick={improve} busy={busy} disabled={disabled} title="Rewrite with Claude using the story bible canon">✦ Improve with Claude</Button>
+        <Button className="ghost xs" onClick={() => setManual(!manual)} disabled={disabled} title="Use your own ChatGPT / Gemini subscription instead ($0): copy the prompt, paste the answer back">{manual ? "▾" : "manual ▸"}</Button>
       </div>
+      {manual ? (
+        <div className="card" style={{ padding: 10, gap: 8, background: "var(--bg-2)" }}>
+          <div className="row"><Button className="sm" busy={busy} onClick={copy}>1 · Copy prompt</Button><span className="dim small">→ paste in ChatGPT / Gemini</span></div>
+          <textarea rows={4} className="mono" placeholder="2 · Paste the rewritten text here" value={pasted} onChange={(e) => setPasted(e.target.value)} />
+          <div className="row"><Button className="primary sm" onClick={() => { setProposal(pasted.trim()); setPasted(""); setManual(false); }} disabled={!pasted.trim()}>3 · Review</Button></div>
+        </div>
+      ) : null}
       {single
         ? <input value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} disabled={disabled} />
         : <textarea className={mono ? "mono" : ""} rows={rows} value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} disabled={disabled} />}

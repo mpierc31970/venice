@@ -30,7 +30,7 @@ r.post("/screenplay", async (req, res, next) => {
     const canon = await loadCanon(dir, { bibleChars: 14000 });
     const cast = canon.elements.filter((e) => e.type === "character").map(elementBlock).join("\n\n");
     const text = await streamToSse(res, {
-      model: req.body?.model || project.defaults.textModel,
+      model: req.body?.model || project.defaults.textModel, dry: req.body?.dry, result: req.body?.result,
       system: `${SCREENPLAY_SYSTEM}\n\n${canon.block}\n\nCAST:\n${cast}`,
       user: `Title: ${project.title}\nLogline: ${project.logline}\n${req.body?.notes ? `Notes: ${req.body.notes}\n` : ""}Write the screenplay.`,
       temperature: 0.8, maxTokens: 16000,
@@ -46,7 +46,7 @@ r.post("/scenes", async (req, res, next) => {
     const screenplay = await readText(P.screenplay(dir));
     if (!screenplay.trim()) throw httpError(400, "Write or generate the screenplay first");
     const canon = await loadCanon(dir, { bibleChars: 3000 });
-    const data = await completeJson({ model: req.body?.model || project.defaults.textModel, system: `${SCENES_SYSTEM}\n\nKnown cast names: ${canon.elements.filter((e) => e.type === "character").map((e) => e.name).join(", ")}\nKnown locations: ${canon.elements.filter((e) => e.type === "location").map((e) => e.name).join(", ")}`, user: screenplay, maxTokens: 12000 });
+    const data = await completeJson({ model: req.body?.model || project.defaults.textModel, dry: req.body?.dry, result: req.body?.result, system: `${SCENES_SYSTEM}\n\nKnown cast names: ${canon.elements.filter((e) => e.type === "character").map((e) => e.name).join(", ")}\nKnown locations: ${canon.elements.filter((e) => e.type === "location").map((e) => e.name).join(", ")}`, user: screenplay, maxTokens: 12000 });
     const scenes = (data.scenes || []).map((s, i) => ({ ...s, id: s.id || `s${i + 1}`, shots: s.shots || [] }));
     await writeJson(P.scenes(dir), { scenes });
     res.json(scenes);
@@ -65,7 +65,7 @@ r.post("/scenes/:sid/shotlist", async (req, res, next) => {
     const durations = durationsFor(vm).filter((d) => d !== "auto" && d !== "-1");
     const canon = await loadCanon(dir, { bibleChars: 3000 });
     const data = await completeJson({
-      model: req.body?.model || project.defaults.textModel,
+      model: req.body?.model || project.defaults.textModel, dry: req.body?.dry, result: req.body?.result,
       system: `${SHOTLIST_SYSTEM({ durations: durations.length ? durations : ["5s", "10s"], videoModel })}\n\n${canon.block}`,
       user: JSON.stringify({ scene: { title: scene.title, location: scene.location, mood: scene.mood, synopsis: scene.synopsis, characters: scene.characters, dialogue: scene.dialogue } }),
       maxTokens: 8000,

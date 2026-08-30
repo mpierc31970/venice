@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate, useParams, Link } from "react-router-dom";
 import { api, media, fileToBase64 } from "../lib/api.js";
 import { useProject, useStudio } from "../lib/store.jsx";
 import { Button, ImproveField, ModelPicker, StepHead, Thumb, Empty, money } from "../components/ui.jsx";
+import { ClaudeAction, ImportButton } from "../components/manual.jsx";
 
 const ANGLES = [["frontal", "Frontal"], ["q45", "45°"], ["profile", "Profile"], ["rear", "¾ rear"]];
 const QA = [["silhouette", "Form & silhouette"], ["wardrobe", "Material & wardrobe"], ["features", "Fingerprint features present"], ["style", "Style coherent"], ["scale", "Scale correct"]];
@@ -105,7 +106,7 @@ function ElementEditor() {
       <div className="row"><Link to=".." className="btn ghost sm">← All elements</Link><h1 className="grow">{el.name} <span className="dim" style={{ fontWeight: 400 }}>· {el.type}</span></h1>{el.locked ? <span className="chip accent">locked</span> : null}</div>
 
       <div className="card">
-        <header><h2>A · Identity on paper</h2><span className="grow" /><Button className="claude sm" busy={busy === "draft"} onClick={draft}>✦ Draft with Claude</Button></header>
+        <header><h2>A · Identity on paper</h2><span className="grow" /><ClaudeAction url={`/api/projects/${id}/elements/${slug}/draft`} label="Draft with Claude" busy={busy === "draft"} onRun={draft} onApplied={reload} small /></header>
         <div className="grid2">
           <div className="field"><label>Name</label><input value={el.name} onChange={(e) => setEl({ ...el, name: e.target.value })} /></div>
           <div className="field"><label>Role</label><input value={el.role || ""} onChange={(e) => setEl({ ...el, role: e.target.value })} /></div>
@@ -124,6 +125,7 @@ function ElementEditor() {
           <ModelPicker type="image" value={imageModel} onChange={setImageModel} allowEmpty small filter={(m) => !/bg-remover|upscal|edit/.test(m.id)} />
           <select style={{ width: 120 }} value={boardCount} onChange={(e) => setBoardCount(Number(e.target.value))}>{[1, 2, 4, 6, 8, 12].map((n) => <option key={n} value={n}>{n} image{n > 1 ? "s" : ""}</option>)}</select>
           <Button className="primary" busy={busy === "board"} onClick={board} disabled={!el.description}>Generate candidates{perImage != null ? ` (≈${money(perImage * boardCount)})` : ""}</Button>
+          <ImportButton label="Import my own image ($0)" accept="image/*" onFile={async (f) => { await call("import", async () => api.post(`/api/projects/${id}/elements/${slug}/import`, { name: f.name, data: await fileToBase64(f) }), "Added to the board — click it to make it the frontal."); }} />
         </div>
         {el.board?.length ? (
           <div className="thumbs">
@@ -142,12 +144,13 @@ function ElementEditor() {
             return (
               <div className="slot" key={a}>
                 <div className="name">{label}</div>
-                {ang ? <Thumb src={media(id, ang.file)} wide={el.type === "location"} /> : <Empty wide={el.type === "location"}>{a === "frontal" ? "pick from the board" : "not derived yet"}</Empty>}
+                {ang ? <Thumb src={media(id, ang.file)} wide={el.type === "location"} /> : <Empty wide={el.type === "location"}><span>{a === "frontal" ? "pick from the board" : "not derived yet"}<br /><ImportButton className="xs ghost" label="Import" accept="image/*" onFile={async (f) => { await call("import-" + a, async () => api.post(`/api/projects/${id}/elements/${slug}/import`, { name: f.name, data: await fileToBase64(f), angle: a }), `Imported ${label}.`); }} /></span></Empty>}
                 {ang ? (
                   <div className="stack" style={{ gap: 4 }}>
                     {QA.map(([k, lbl]) => <label key={k} style={{ display: "flex", gap: 6, alignItems: "center", margin: 0, fontSize: 11.5 }}><input type="checkbox" style={{ width: "auto" }} checked={q?.checks?.[k] === true} onChange={(e) => qa(a, k, e.target.checked)} />{lbl}</label>)}
                     {q ? <span className={`chip ${q.verdict === "pass" ? "ok" : "warn"}`} style={{ alignSelf: "flex-start" }}>{q.verdict === "pass" ? `pass (${q.fails} fail)` : "regenerate"}</span> : null}
                     {a !== "frontal" ? <Button className="xs" busy={busy === "angle-" + a} onClick={() => regenAngle(a)}>Regenerate</Button> : null}
+                    <ImportButton className="xs ghost" label="Import" accept="image/*" onFile={async (f) => { await call("import-" + a, async () => api.post(`/api/projects/${id}/elements/${slug}/import`, { name: f.name, data: await fileToBase64(f), angle: a }), `Imported ${label}.`); }} />
                   </div>
                 ) : null}
               </div>

@@ -66,7 +66,7 @@ r.post("/:slug/draft", async (req, res, next) => {
     const el = await getEl(dir, req.params.slug);
     const canon = await loadCanon(dir);
     const data = await completeJson({
-      model: req.body?.model || project.defaults.textModel,
+      model: req.body?.model || project.defaults.textModel, dry: req.body?.dry, result: req.body?.result,
       system: `${elementSystem(el.type)}\n\n${canon.block}`,
       user: `Element name: ${el.name}\nType: ${el.type}\nRole: ${el.role || ""}\nExisting bio: ${el.bio || ""}\nExisting fingerprint: ${(el.fingerprint || []).join("; ")}\nExisting description: ${el.description || ""}\nCreator notes: ${req.body?.notes || ""}`,
     });
@@ -137,6 +137,28 @@ r.post("/:slug/board", async (req, res, next) => {
       results.push({ file: rel(dir, abs), seed, model: modelId, prompt });
     }
     el.board = [...(el.board || []), ...results]; el.imageModel = modelId;
+    await saveEl(dir, el.slug, el);
+    res.json(el);
+  } catch (e) { next(e); }
+});
+
+// POST /:slug/import { name, data(base64), angle? } -> use your own image as a board candidate (or directly as an angle)
+r.post("/:slug/import", async (req, res, next) => {
+  try {
+    const { dir } = req.proj;
+    const el = await getEl(dir, req.params.slug);
+    const { name = "", data, angle } = req.body || {};
+    if (!data) throw httpError(400, "data required");
+    const ext = (path.extname(name) || ".png").toLowerCase();
+    if (angle && ANGLE_INSTRUCTIONS[angle]) {
+      const abs = path.join(P.elementDir(dir, el.slug), "angles", `${angle}-import-${stamp()}${ext}`);
+      await saveBase64(abs, data);
+      el.angles[angle] = { file: rel(dir, abs), model: "imported", prompt: "", source: name }; el.qa[angle] = null;
+    } else {
+      const abs = path.join(P.elementDir(dir, el.slug), "board", `import-${stamp()}${ext}`);
+      await saveBase64(abs, data);
+      el.board = [...(el.board || []), { file: rel(dir, abs), seed: null, model: "imported", prompt: "", source: name }];
+    }
     await saveEl(dir, el.slug, el);
     res.json(el);
   } catch (e) { next(e); }

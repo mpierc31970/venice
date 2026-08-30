@@ -27,9 +27,10 @@ r.post("/generate", async (req, res, next) => {
   try {
     const { dir, project } = req.proj;
     const model = req.body.model || project.defaults.textModel;
+    const dry = req.body?.dry, result = req.body?.result;
     const logline = req.body.logline || project.logline || "";
     const text = await streamToSse(res, {
-      model, system: BIBLE_SYSTEM,
+      model, dry, result, system: BIBLE_SYSTEM,
       user: bibleUser({ title: project.title, logline, notes: req.body.notes || "" }),
       temperature: 0.8, maxTokens: 16000,
     });
@@ -45,7 +46,7 @@ r.post("/section", async (req, res, next) => {
     const bible = await readText(P.bible(dir));
     const { heading, instructions = "", model = project.defaults.textModel } = req.body;
     await streamToSse(res, {
-      model, system: BIBLE_SYSTEM + "\n\nYou are now REWRITING ONE SECTION ONLY. Output only that section, starting with its '## ' heading, consistent with the rest of the bible.",
+      model, dry: req.body?.dry, result: req.body?.result, system: BIBLE_SYSTEM + "\n\nYou are now REWRITING ONE SECTION ONLY. Output only that section, starting with its '## ' heading, consistent with the rest of the bible.",
       user: `Full bible:\n\n${bible}\n\n---\nRewrite the section "## ${heading}". ${instructions}`,
       temperature: 0.8,
     });
@@ -59,7 +60,7 @@ r.post("/extract", async (req, res, next) => {
     const bible = await readText(P.bible(dir));
     if (!bible.trim()) return res.status(400).json({ error: "Bible is empty" });
     const model = req.body?.model || project.defaults.textModel;
-    const data = await completeJson({ model, system: EXTRACT_SYSTEM, user: bible, maxTokens: 8000 });
+    const data = await completeJson({ model, dry: req.body?.dry, result: req.body?.result, system: EXTRACT_SYSTEM, user: bible, maxTokens: 8000 });
     await writeText(P.worldSeed(dir), data.worldSeed || "");
     await writeJson(`${dir}/bible-extract.json`, data);
     await writeJson(P.project(dir), { ...project, hardNegatives: data.hardNegatives || "", palette: data.palette || null, prohibitions: data.prohibitions || [] });
@@ -102,7 +103,7 @@ r.post("/improve", async (req, res, next) => {
     const canon = await loadCanon(dir, { bibleChars: 4000 });
     const { complete } = await import("../lib/llm.js");
     const out = await complete({
-      model, system: `${IMPROVE_SYSTEM(kind)}\n\n${canon.block}`,
+      model, dry: req.body?.dry, result: req.body?.result, system: `${IMPROVE_SYSTEM(kind)}\n\n${canon.block}`,
       user: `${context ? `Context: ${context}\n\n` : ""}TEXT TO IMPROVE:\n${text}`, temperature: 0.6,
     });
     res.json({ text: out.trim() });

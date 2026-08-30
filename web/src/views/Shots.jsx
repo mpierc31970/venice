@@ -3,6 +3,8 @@ import { useParams, Link } from "react-router-dom";
 import { api, media } from "../lib/api.js";
 import { useProject, useStudio } from "../lib/store.jsx";
 import { Button, ImproveField, ModelPicker, StepHead, Thumb, Empty, money } from "../components/ui.jsx";
+import { ClaudeAction, ImportButton } from "../components/manual.jsx";
+import { fileToBase64 } from "../lib/api.js";
 
 const MODE = {
   keyframes: { step: "keyframes", title: "Keyframe" },
@@ -111,12 +113,13 @@ function KeyframePanel({ shot }) {
       <div className="card">
         <header><h2>{shot.id} · Keyframe</h2><span className="grow" /><span className="chip">{shot.type} · {shot.durationS}</span></header>
         <ShotMeta shot={shot} local={local} setLocal={setLocal} />
-        <div className="row"><Button className="claude" busy={busy === "compose"} onClick={compose}>✦ Compose keyframe prompt</Button><Button className="ghost sm" busy={busy === "save"} onClick={() => run("save", saveMeta, "Saved")}>Save</Button></div>
+        <div className="row top"><ClaudeAction url={`/api/projects/${id}/shots/${shot.id}/keyframe-prompt`} label="Compose keyframe prompt" busy={busy === "compose"} onRun={compose} onApplied={async () => { const s = await api.get(`/api/projects/${id}/shots/${shot.id}`); setLocal((l) => ({ ...l, keyframePrompt: s.keyframePrompt })); }} /><Button className="ghost sm" busy={busy === "save"} onClick={() => run("save", saveMeta, "Saved")}>Save</Button></div>
         <ImproveField label="Keyframe (still image) prompt" kind="image" rows={6} value={local.keyframePrompt} onChange={(v) => setLocal({ ...local, keyframePrompt: v })} context={`Shot ${shot.id}: ${shot.type}, ${shot.camera}. ${shot.action}`} hint="World seed + plate + verbatim character descriptions + blocking + framing + lighting. Don't paraphrase the verbatim blocks." />
         <div className="row">
           <ModelPicker type="image" value={local.image} onChange={(v) => setLocal({ ...local, image: v })} allowEmpty small filter={(m) => !/bg-remover|upscal|edit/.test(m.id)} />
           <select style={{ width: 110 }} value={variants} onChange={(e) => setVariants(Number(e.target.value))}>{[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n} variant{n > 1 ? "s" : ""}</option>)}</select>
           <Button className="primary" busy={busy === "gen"} onClick={gen} disabled={!local.keyframePrompt}>Generate{per ? ` (≈${money(per * variants)})` : ""}</Button>
+          <ImportButton label="Import my own still ($0)" accept="image/*" onFile={async (f) => { await run("import", async () => api.post(`/api/projects/${id}/shots/${shot.id}/import`, { kind: "keyframe", name: f.name, data: await fileToBase64(f) }), "Imported and locked as the keyframe."); }} />
         </div>
       </div>
       <div className="card">
@@ -165,7 +168,7 @@ function RenderPanel({ shot }) {
           </div>
         </div>
         <ShotMeta shot={shot} local={local} setLocal={setLocal} />
-        <div className="row"><Button className="claude" busy={busy === "compose"} onClick={compose}>✦ Compose video prompt</Button></div>
+        <div className="row top"><ClaudeAction url={`/api/projects/${id}/shots/${shot.id}/video-prompt`} label="Compose video prompt" busy={busy === "compose"} onRun={compose} onApplied={async () => { const s = await api.get(`/api/projects/${id}/shots/${shot.id}`); setLocal((l) => ({ ...l, videoPrompt: s.videoPrompt })); }} /><span className="dim small">Tip: paste this prompt into Sora / Veo in your subscription, then import the clip below.</span></div>
         <ImproveField label="Video prompt" kind="video" rows={6} value={local.videoPrompt} onChange={(v) => setLocal({ ...local, videoPrompt: v })} context={`Shot ${shot.id}: ${shot.type}, ${shot.camera}, ${local.duration}. Model ${vm?.id || ""}.`} hint="[subject @Element] + one motion + environment (@Image1) + one camera instruction + lighting. 50–150 words. Duration in parentheses." />
         <div className="row">
           <Button busy={busy === "quote"} onClick={getQuote} disabled={!local.videoPrompt}>Get quote</Button>
@@ -174,6 +177,7 @@ function RenderPanel({ shot }) {
           <span className="grow" />
           <Button className="primary" busy={busy === "render"} onClick={render} disabled={!local.videoPrompt || active}>{active ? "Rendering…" : "Queue render"}</Button>
           {shot.provenance?.length ? <Button className="sm" busy={busy === "reroll"} onClick={reroll} disabled={active}>Re-roll last</Button> : null}
+          <ImportButton label="Import my own clip ($0)" accept="video/*" onFile={async (f) => { await run("import", async () => api.post(`/api/projects/${id}/shots/${shot.id}/import`, { kind: "clip", name: f.name, data: await fileToBase64(f) }), "Clip imported and selected for this shot."); }} />
         </div>
         {job ? <div className="dim small">Job {job.id}: {job.status}{job.eta ? ` · ~${Math.round(job.eta / 1000)}s typical` : ""}{job.error ? ` · ${job.error}` : ""}</div> : null}
       </div>

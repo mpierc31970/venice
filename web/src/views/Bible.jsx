@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { api, stream } from "../lib/api.js";
 import { useProject, useStudio } from "../lib/store.jsx";
 import { Button, ImproveField, ModelPicker, StepHead } from "../components/ui.jsx";
+import { ClaudeAction } from "../components/manual.jsx";
 
 const SECTIONS = ["Pitch", "World", "Locations", "Cast", "Aesthetic", "Hard negatives", "Official world seed", "Canon"];
 
@@ -59,7 +60,7 @@ export default function Bible() {
       <div className="card">
         <header><h2>1 · Write the bible with Claude</h2><span className="grow" /><span className="chip">{project.defaults.textModel}</span></header>
         <ImproveField label="Creator notes (optional)" kind="generic" rows={3} value={notes} onChange={setNotes} placeholder="Tone, era, references, must-haves, must-nots, number of characters…" />
-        <div className="row"><Button className="claude" busy={busy === "gen"} onClick={generate}>✦ {text ? "Regenerate whole bible" : "Write the bible"}</Button><span className="dim small">Logline: {project.logline || "(set it in step 1)"}</span></div>
+        <div className="row top"><ClaudeAction url={`/api/projects/${id}/bible/generate`} body={{ notes, model: model || undefined }} isStream label={text ? "Regenerate whole bible" : "Write the bible"} busy={busy === "gen"} onRun={generate} onApplied={reload} /><span className="dim small">Logline: {project.logline || "(set it in step 1)"}</span></div>
       </div>
 
       <div className="card">
@@ -80,7 +81,7 @@ export default function Bible() {
       </div>
 
       <div className="card">
-        <header><h2>3 · Extract the canon</h2><span className="grow" /><Button className="claude" busy={busy === "extract"} onClick={extract} disabled={!text.trim()}>✦ Extract world seed & cast</Button></header>
+        <header><h2>3 · Extract the canon</h2><span className="grow" /><ClaudeAction url={`/api/projects/${id}/bible/extract`} body={{ model: model || undefined }} label="Extract world seed & cast" busy={busy === "extract"} onRun={extract} onApplied={reload} disabled={!text.trim()} /></header>
         <p className="muted">Claude pulls the official world seed, hard negatives, palette and cast into structured data. The world seed below is what every prompt starts with — tune it here.</p>
         <ImproveField label="Official world seed" kind="image" rows={5} value={seed} onChange={(v) => { setSeed(v); setDirty(true); }} hint="60–120 words: style, palette, era, lighting, render canon, mood. No character names." />
         {ex ? (

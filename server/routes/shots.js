@@ -62,7 +62,7 @@ r.post("/:id/keyframe-prompt", async (req, res, next) => {
     const shot = await getShot(dir, req.params.id);
     const { canon, scene, chars, loc, dialogue } = await contextFor(dir, shot);
     const text = await complete({
-      model: req.body?.model || project.defaults.textModel,
+      model: req.body?.model || project.defaults.textModel, dry: req.body?.dry, result: req.body?.result,
       system: `${KEYFRAME_SYSTEM}\n\n${canon.block}`,
       user: `Scene: ${scene?.title} — mood: ${scene?.mood}\nLocation: ${shot.location}${loc ? `\nLocation description: ${loc.description}` : ""}\nShot type: ${shot.type}; camera framing: ${shot.camera}\nAction: ${shot.action}\n${dialogue.length ? `Dialogue in shot: ${dialogue.map((d) => `${d.character}: "${d.line}"`).join(" / ")}\n` : ""}\nCHARACTERS (use verbatim descriptions unchanged):\n${chars.map(elementBlock).join("\n\n") || "(none)"}`,
       temperature: 0.6,
@@ -117,7 +117,7 @@ r.post("/:id/video-prompt", async (req, res, next) => {
     const vm = await getModel(shot.models?.video || project.defaults.videoModel);
     const hasElements = /reference-to-video/.test(vm?.id || "") && chars.some((c) => c.angles?.frontal);
     const text = await complete({
-      model: req.body?.model || project.defaults.textModel,
+      model: req.body?.model || project.defaults.textModel, dry: req.body?.dry, result: req.body?.result,
       system: `${VIDEO_PROMPT_SYSTEM({ hasElements })}\n\n${canon.block}`,
       user: `Scene: ${scene?.title} — mood: ${scene?.mood}\nLocation: ${shot.location}${loc ? ` — ${loc.description}` : ""}\nShot type: ${shot.type}; camera: ${shot.camera}; duration: ${shot.durationS}\nAction: ${shot.action}\n${dialogue.length ? `Dialogue (characters speak these lines; if the model generates audio, include them as spoken dialogue): ${dialogue.map((d) => `${d.character}: "${d.line}"`).join(" / ")}\n` : ""}\nCHARACTERS in order${hasElements ? " (Element1..N)" : ""}:\n${chars.map((c, i) => `${hasElements ? `@Element${i + 1} = ` : ""}${elementBlock(c)}`).join("\n\n") || "(none)"}${shot.plates?.length && hasElements ? "\n@Image1 = scene plate provided." : ""}`,
       temperature: 0.6,
@@ -222,6 +222,24 @@ r.post("/:id/reroll", async (req, res, next) => {
     shot.provenance = [...shot.provenance, { at: new Date().toISOString(), jobId: job.id, request: job.request, refs, outFile: rel(dir, outFile), rerollOf: last.jobId }];
     await saveShot(dir, shot);
     res.status(202).json({ job, shot });
+  } catch (e) { next(e); }
+});
+
+// POST /:id/import { kind: "clip"|"keyframe", name, data(base64) } -> use your own file (e.g. from Sora/Veo/Imagen) for this shot
+r.post("/:id/import", async (req, res, next) => {
+  try {
+    const { dir } = req.proj;
+    const shot = await getShot(dir, req.params.id);
+    const { kind, name = "", data } = req.body || {};
+    if (!data || !["clip", "keyframe"].includes(kind)) throw httpError(400, "kind (clip|keyframe) and data required");
+    const ext = (path.extname(name) || (kind === "clip" ? ".mp4" : ".png")).toLowerCase();
+    const abs = path.join(P.shotDir(dir, shot.id), `${kind}-import-${stamp()}${ext}`);
+    await saveBase64(abs, data);
+    const file = rel(dir, abs);
+    if (kind === "clip") { shot.clip = file; shot.clips = [...(shot.clips || []), { jobId: null, status: "IMPORTED", file, error: null, at: new Date().toISOString(), source: name }]; }
+    else { shot.keyframe = file; shot.keyframes = [...(shot.keyframes || []), { file, model: "imported", prompt: shot.keyframePrompt || "", seed: null, source: name }]; }
+    await saveShot(dir, shot);
+    res.json(shot);
   } catch (e) { next(e); }
 });
 
