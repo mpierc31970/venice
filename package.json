@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --env-file=.env test-chat.js"
+    "test": "node --env-file=.env test-chat.js",
+    "stream": "node --env-file=.env stream-chat.js"
   },
   "dependencies": {
     "openai": "^6.49.0"
