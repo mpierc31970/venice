@@ -1,6 +1,7 @@
 import { Router } from "express";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { listProjects, registerProject, forgetProject } from "../lib/registry.js";
 import { openProject, readJson, writeJson, slugify, httpError, P, exists } from "../lib/store.js";
 
@@ -70,6 +71,18 @@ r.patch("/:id", async (req, res, next) => {
     await writeJson(P.project(dir), next_);
     if (patch.title) await registerProject({ id: project.id, title: patch.title, dir });
     res.json(next_);
+  } catch (e) { next(e); }
+});
+
+// Open the project folder in the OS file manager (local app convenience)
+r.post("/:id/open-folder", async (req, res, next) => {
+  try {
+    const { dir } = await openProject(req.params.id);
+    const sub = req.body?.sub ? path.join(dir, req.body.sub) : dir;
+    const target = (await exists(sub)) ? sub : dir;
+    const cmd = process.platform === "win32" ? ["explorer", [target]] : process.platform === "darwin" ? ["open", [target]] : ["xdg-open", [target]];
+    spawn(cmd[0], cmd[1], { detached: true, stdio: "ignore" }).unref();
+    res.json({ ok: true, dir: target });
   } catch (e) { next(e); }
 });
 

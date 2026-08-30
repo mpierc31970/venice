@@ -2,6 +2,7 @@ import React from "react";
 import { Routes, Route, NavLink, useParams, Link, Navigate } from "react-router-dom";
 import { StudioProvider, ProjectProvider, useProject, useStudio, STEPS } from "./lib/store.jsx";
 import { BalanceChip, Toasts, Spinner } from "./components/ui.jsx";
+import { api } from "./lib/api.js";
 import Projects from "./views/Projects.jsx";
 import Setup from "./views/Setup.jsx";
 import Bible from "./views/Bible.jsx";
@@ -61,7 +62,10 @@ function ProjectFrame() {
   if (p.error) return <div className="shell" style={{ gridTemplateColumns: "1fr" }}><TopBar /><div className="main"><div className="page"><div className="card">Couldn't open project: {p.error}. <Link to="/">Back to projects</Link></div></div></div></div>;
   return (
     <div className="shell">
-      <TopBar><span className="crumb">/</span><span>{p.project.title}</span></TopBar>
+      <TopBar>
+        <span className="crumb">/</span><span>{p.project.title}</span>
+        <OpenFolder id={p.id} dir={p.dir} />
+      </TopBar>
       <Rail />
       <div className="main">
         <Routes>
@@ -76,6 +80,18 @@ function ProjectFrame() {
         </Routes>
       </div>
     </div>
+  );
+}
+
+function OpenFolder({ id, dir }) {
+  const { toast } = useStudio();
+  const open = (sub) => api.post(`/api/projects/${id}/open-folder`, { sub }).catch((e) => toast(e.message, "error"));
+  return (
+    <span className="row" style={{ gap: 4 }}>
+      <button className="btn sm" onClick={() => open()} title={dir}>📁 Open project folder</button>
+      <button className="btn ghost sm" onClick={() => open("assets")} title="Drop scene assets here">assets/</button>
+      <button className="btn ghost sm" onClick={() => open("shots")} title="Rendered clips and audio">shots/</button>
+    </span>
   );
 }
 
