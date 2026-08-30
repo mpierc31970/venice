@@ -200,13 +200,13 @@ r.post("/:slug/angles", async (req, res, next) => {
       const modelId = req.body?.model || el.imageModel || el.angles.frontal.model || project.defaults.imageModel;
       const m = await getModel(modelId);
       if (!m) throw httpError(400, "Unknown image model " + modelId);
-      const negative = ["people, person, figure, silhouette, face, hands, crowd", canon.hardNegatives, el.negatives].filter(Boolean).join(", ");
+      const negative = ["people, person, figure, silhouette, face, hands, crowd, camera, tripod, photographer, film equipment", canon.hardNegatives, el.negatives].filter(Boolean).join(", ");
       for (const a of angles) {
         if (!LOCATION_ANGLES[a]) continue;
         try {
           const prompt = referencePrompt({ worldSeed: canon.worldSeed, description: el.description, angle: a, type: "location" });
           const body = imageBody(m, { prompt, negative, aspect: project.defaults.aspect, resolution: project.defaults.resolution, seed: el.angles.frontal.seed ?? el.seed, safeMode: project.defaults.safeMode, hideWatermark: project.defaults.hideWatermark });
-          if (m.model_spec?.capabilities?.supportsStyleReferences !== false) body.style_references = [{ image: frontal, strength: 0.7 }];
+          if (m.model_spec?.capabilities?.supportsStyleReferences === true) body.style_references = [{ image: frontal, strength: 0.7 }];
           const r_ = await imageGenerate(body);
           const abs = path.join(P.elementDir(dir, el.slug), "angles", `${a}-${stamp()}.png`);
           await saveBase64(abs, r_.images[0]);

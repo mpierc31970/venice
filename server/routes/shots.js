@@ -92,7 +92,7 @@ r.post("/:id/keyframe", async (req, res, next) => {
     if (c.resolutions?.length) body.resolution = c.resolutions.includes(project.defaults.resolution) ? project.defaults.resolution : c.defaultResolution;
     const refs = [];
     for (const p of shot.plates || []) { try { refs.push({ image: await toDataUrl(inside(dir, p)), strength: 0.6 }); } catch {} }
-    if (refs.length && m.model_spec?.capabilities?.supportsStyleReferences !== false) body.style_references = refs.slice(0, m.model_spec?.capabilities?.maxStyleReferences || 3);
+    if (refs.length && m.model_spec?.capabilities?.supportsStyleReferences === true) body.style_references = refs.slice(0, m.model_spec?.capabilities?.maxStyleReferences || 3);
     const out = await imageGenerate(body);
     const files = [];
     for (const [i, b64] of (out.images || []).entries()) {
