@@ -1,0 +1,12 @@
+{
+  "name": "venice",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --env-file=.env test-chat.js"
+  },
+  "dependencies": {
+    "openai": "^6.49.0"
+  }
+}
