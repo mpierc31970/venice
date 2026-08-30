@@ -8,7 +8,7 @@ import { openProject, readJson, writeJson, slugify, httpError, P, exists } from 
 const r = Router();
 
 export const DEFAULTS = {
-  textModel: "gemini:gemini-2.5-flash",
+  textModel: "venice:claude-sonnet-5",
   imageModel: "nano-banana-pro",
   editModel: "flux-2-max-edit",
   videoModel: "seedance-2-5-reference-to-video-basic",
