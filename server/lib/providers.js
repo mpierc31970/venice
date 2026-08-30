@@ -25,7 +25,7 @@ const PROVIDERS = {
       if (!res.ok) throw new Error(`Gemini models: ${res.status}`);
       const j = await res.json();
       return (j.models || [])
-        .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent") && /gemini/.test(m.name) && !/embedding|tts|image|audio|vision-latest|exp/i.test(m.name))
+        .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent") && /gemini/.test(m.name) && !/embedding|tts|image|audio|vision-latest|exp|computer-use|robotics|live|customtools|deep-research|transcribe/i.test(m.name))
         .map((m) => ({ id: m.name.replace(/^models\//, ""), name: m.displayName || m.name }));
     },
   },

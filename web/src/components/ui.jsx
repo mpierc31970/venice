@@ -56,10 +56,11 @@ export function ModelPicker({ type, value, onChange, filter, allowEmpty, label, 
     }
     return l;
   }, [models, type, filter]);
+  const norm = type === "text" && value && !value.includes(":") ? `venice:${value}` : value; // legacy unprefixed ids
   const sel = (
-    <select value={value || ""} onChange={(e) => onChange(e.target.value || null)} style={small ? { padding: "5px 30px 5px 8px", fontSize: 12.5 } : undefined}>
+    <select value={norm || ""} onChange={(e) => onChange(e.target.value || null)} style={small ? { padding: "5px 30px 5px 8px", fontSize: 12.5 } : undefined}>
       {allowEmpty ? <option value="">(project default)</option> : null}
-      {!list.length ? <option value={value || ""}>{value || "loading…"}</option> : null}
+      {!list.length || (norm && !list.some((m) => m.id === norm)) ? <option value={norm || ""}>{norm || "loading…"}</option> : null}
       {list.map((m) => <option key={m.id} value={m.id}>{labelFor(m)}</option>)}
     </select>
   );
