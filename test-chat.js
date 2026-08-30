@@ -1,4 +1,4 @@
-import { venice, VENICE_MODEL } from "./venice.js";
+import { venice, VENICE_MODEL } from "./server/venice.js";
 
 const res = await venice.chat.completions.create({
   model: VENICE_MODEL,
