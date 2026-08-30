@@ -114,7 +114,7 @@ export function JobRow({ job }) {
     <div className="job" title={job.error || ""}>
       <div className="t"><span className="mono">{job.meta?.shotId || job.id}</span><span style={{ color }}>{job.status.toLowerCase()}</span></div>
       {job.status === "PROCESSING" || job.status === "PENDING" ? <div className="bar"><i style={{ width: `${pct}%` }} /></div> : null}
-      {job.error ? <div className="dim" style={{ fontSize: 11, whiteSpace: "normal" }}>{job.error.slice(0, 140)}</div> : null}
+      {job.error ? <div className="dim" style={{ fontSize: 11, whiteSpace: "normal" }}>{job.error.slice(0, 140)}{/content policy/i.test(job.error) ? <><br /><span style={{ color: "var(--warn)" }}>Provider moderation, not Venice — this shot's prompt is fine. Re-render with another family (Wan, Kling, LTX, Veo).</span></> : null}</div> : null}
     </div>
   );
 }
