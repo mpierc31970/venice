@@ -4,8 +4,9 @@ A local, step-by-step studio for making AI films with the [Venice.ai](https://ve
 "story bible" method from Venice's filmmaking tutorials: lock the canon first, generate identity references
 before anything else, and derive every script, keyframe, clip and line of dialogue from that one locked source.
 
-Claude (via Venice), image generation/editing, 120+ video models, and 11 TTS engines all run through a single
-`VENICE_API_KEY` — you never leave the app.
+Image generation/editing, 120+ video models, and 11 TTS engines run through `VENICE_API_KEY`. Writing can use
+**Claude Code on your existing subscription** (the local `claude` CLI, $0 API cost — the default), Claude via Venice,
+Gemini's free tier, or OpenAI — or *manual mode*: copy the prompt into ChatGPT/Gemini and paste the answer back.
 
 ## Run it
 
