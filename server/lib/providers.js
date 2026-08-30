@@ -2,6 +2,7 @@
 // Un-prefixed ids are treated as Venice for backward compatibility.
 import OpenAI from "openai";
 import { venice } from "../venice.js";
+import * as claudecode from "./claudecode.js";
 
 const PROVIDERS = {
   venice: {
@@ -13,6 +14,14 @@ const PROVIDERS = {
       const { models } = await import("./modelcache.js");
       return (await models("text")).map((m) => ({ id: m.id, name: m.model_spec?.name || m.id }));
     },
+  },
+  claudecode: {
+    label: "Claude Code (your subscription)",
+    note: "Runs the local `claude` CLI headlessly. Covered by your Claude subscription — no API credits. Slower to start; counts toward your usage limits.",
+    paid: false,
+    key: () => (claudecode.cliAvailable() ? "ok" : ""),
+    client: () => claudecode.client,
+    listModels: async () => claudecode.MODELS,
   },
   gemini: {
     label: "Gemini (Google AI Studio)",
@@ -52,7 +61,7 @@ export function parseModel(id) {
 export function resolve(id) {
   const { provider, model } = parseModel(id);
   const def = PROVIDERS[provider];
-  if (def.key && !def.key()) throw Object.assign(new Error(`${def.label} is not configured — add ${provider.toUpperCase()}_API_KEY to .env`), { status: 400 });
+  if (def.key && !def.key()) throw Object.assign(new Error(provider === "claudecode" ? "Claude Code CLI not found on PATH" : `${def.label} is not configured — add ${provider.toUpperCase()}_API_KEY to .env`), { status: 400 });
   return { provider, model, client: def.client(), paid: def.paid };
 }
 
