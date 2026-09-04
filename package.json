@@ -9,6 +9,7 @@
     "build": "npm run build -w web",
     "start": "npm run start -w server",
     "test": "node --env-file=.env test-chat.js",
+    "test:jobs": "node server/test/jobs-race.test.mjs",
     "stream": "node --env-file=.env stream-chat.js"
   },
   "devDependencies": {
