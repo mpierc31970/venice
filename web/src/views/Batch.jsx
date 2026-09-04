@@ -525,6 +525,10 @@ function SectionFooter({ id, section, busy, act }) {
   if (!section.complete || !done) return null;
   const key = "tl-" + section.id;
   const write = act(key, () => api.post(`/api/projects/${id}/batch/section/${section.id}/timeline`, {}), `timeline/${section.id}.json written.`);
+  const premiere = act("xml-" + section.id, async () => {
+    const r = await api.post(`/api/projects/${id}/batch/section/${section.id}/premiere`, {});
+    return r;
+  }, `${section.id}.xml written — import it in Premiere.`);
 
   return (
     <div className="row" style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 2 }}>
@@ -532,6 +536,10 @@ function SectionFooter({ id, section, busy, act }) {
       <Button className="sm" busy={busy === key} onClick={write}
         title="Writes timeline/<section>.json — the trim points and clip order Remotion reads. Free, and safe to re-run.">
         {section.timeline ? "Rewrite timeline" : "Build timeline"}
+      </Button>
+      <Button className="sm" busy={busy === "xml-" + section.id} onClick={premiere}
+        title="Writes timeline/<section>.xml — a Premiere sequence with every clip already trimmed at the end of speech. File > Import.">
+        Premiere XML
       </Button>
       {section.timeline ? <span className="dim small mono">{section.timeline}</span> : null}
       <span className="grow" />

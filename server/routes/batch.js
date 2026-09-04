@@ -9,6 +9,7 @@ import fs from "node:fs/promises";
 import { httpError, inside, P, exists } from "../lib/store.js";
 import { saveBase64 } from "../lib/media.js";
 import { listJobs } from "../lib/jobs.js";
+import { buildFcpXml, pixelsFor } from "../lib/premiere.js";
 import {
   readSettings, writeSettings, readState, listRows, sections, importSheet,
   buildPrompt, forgetImages, quoteRow, sectionCost, isPending, balanceUsd,
@@ -227,6 +228,27 @@ r.post("/section/:sectionId/timeline", async (req, res, next) => {
     const section = (await sections(req.proj.dir)).find((s) => s.id === req.params.sectionId);
     if (!section) throw httpError(404, "No such section " + req.params.sectionId);
     res.json(await writeTimeline(req.proj.dir, section));
+  } catch (e) { next(e); }
+});
+
+// POST /section/:sectionId/premiere -> writes timeline/<id>.xml, a Premiere-importable
+// cuts-only sequence with every clip already trimmed at the end of speech. Free.
+r.post("/section/:sectionId/premiere", async (req, res, next) => {
+  try {
+    const { dir } = req.proj;
+    const section = (await sections(dir)).find((s) => s.id === req.params.sectionId);
+    if (!section) throw httpError(404, "No such section " + req.params.sectionId);
+    const settings = await readSettings(dir);
+    const timeline = await writeTimeline(dir, section); // keep the JSON and the XML in step
+    const px = pixelsFor(settings.resolution, settings.aspect);
+    const built = buildFcpXml(timeline, dir, { ...px, name: `${section.label || "Section " + section.id}` });
+    const file = path.join(dir, "timeline", `${section.id}.xml`);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, built.xml, "utf8");
+    res.json({
+      file: `timeline/${section.id}.xml`, segments: built.segments, frames: built.frames,
+      seconds: built.seconds, width: built.width, height: built.height,
+    });
   } catch (e) { next(e); }
 });
 
