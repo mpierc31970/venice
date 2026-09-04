@@ -64,7 +64,16 @@ late clip before the full run.
 - `server/test/sheet.test.mjs` — 38 assertions against the live sheet. `npm run test:sheet`.
 - `server/test/gsheets.check.mjs` — read+write connectivity probe.
   `node --env-file=.env server/test/gsheets.check.mjs`.
-- `.env` gained `GOOGLE_SERVICE_ACCOUNT_KEY` and `SHEET_URL`.
+- `server/lib/batch.js` — settings, the rows.json manifest (with the same per-dir lock
+  `jobs.js` takes), sheet import/merge, prompt building, the section-ordered run loop and
+  `buildTimeline`. `start()` is the only door in; nothing runs on import or server boot.
+- `server/routes/batch.js` — mounted at `/api/projects/:id/batch/*`. Only `POST /run`
+  (without `dryRun`) and `POST /row/:id/render` cost money.
+- `web/src/views/Batch.jsx` — the whole interface, one page.
+- `server/test/batch.test.mjs` — 43 assertions. `npm run test:batch`.
+- `.env` gained `GOOGLE_SERVICE_ACCOUNT_KEY` and `SHEET_URL`, then `WASABI_ACCESS_KEY`
+  and `WASABI_BUCKET` (`acelerace-bucket`). **`WASABI_SECRET_KEY` and `WASABI_REGION` are
+  still blank** — that is what blocks step 2.
 - `@aws-sdk/client-s3` installed. **`exceljs` was installed then removed** — it cannot read the
   original xlsx (that file uses `x:`-prefixed OOXML tags; ExcelJS only parses the unprefixed
   dialect and returns `undefined` for the sheet list). Moot now the Sheet is the source.
@@ -72,9 +81,15 @@ late clip before the full run.
 **All green as of this writing:**
 ```
 npm run test:sheet                                   PASS (38 assertions)
+npm run test:batch                                   PASS (43 assertions)
 npm run test:jobs                                    PASS (no jobs lost)
 node --env-file=.env server/test/gsheets.check.mjs   READ OK / WRITE OK
 ```
+
+**Verification gate 1 passed live, $0, nothing committed to disk** — `POST /batch/import`
+returned 109 rows, 9 sections sized `[8,15,12,17,13,12,10,13,9]`, durations
+`{30s: 104, 25s: 5}`, section `1.1` spanning segments `1.9`–`1.23` while segment `1.1`
+sits in section `1.0`, ids unique, 0 warnings.
 
 Google write-back is **confirmed working** — service account
 `matthewapierce@mpierce1970.iam.gserviceaccount.com`, project `mpierce1970`, sheet shared as
@@ -82,29 +97,28 @@ Editor, Sheets API enabled. So the runner can tick `Complete` itself as each seg
 
 ## Next steps, in order
 
-1. **`server/lib/batch.js`** — state + section-ordered run loop + prompt building.
-   - `withBatch(dir, fn)` / `patchRow(dir, id, mutate)`: copy the promise-chain lock from
-     `server/lib/jobs.js:21-40`. The batch file is rewritten whole, same hazard `jobs.json` had.
-   - Loop: for each section → whole-section budget check → per row: quote → balance →
-     `enqueue` ONE job → await terminal → upload → mark Complete in the sheet.
-   - `onJobDone` (`jobs.js:110`) is **global across all projects** — early-return unless
-     `job.meta?.batchId`, mirroring `shots.js:250`.
-   - Reuse: `enqueue` (`jobs.js:48`, `outFile` must be absolute), `videoQuote`/`getBalance`
-     (`venice.js:66,61`), `toDataUrl`/`saveBuffer`/`stamp` (`media.js`).
-   - Cache the two image data URLs in memory — 3.8 MB of base64, do not rebuild it 109 times.
+1. ~~`server/lib/batch.js`~~ — **done.**
 2. **`server/lib/wasabi.js`** — `@aws-sdk/client-s3`. Keys `<prefix>/clips/<section>/<id>.mp4`
    and `<prefix>/sections/<id>.mp4`. **Special-case `us-east-1` → `https://s3.wasabisys.com`**
-   (no region segment; getting it wrong is a silent 403). Never retry a 403; halt if the first
-   upload of a run 403s. `.env` still needs `WASABI_ACCESS_KEY`, `WASABI_SECRET_KEY`,
-   `WASABI_BUCKET`, `WASABI_REGION` — **not yet supplied**.
-3. **`server/routes/batch.js`** — one line into the `ROUTERS` map at
-   `server/routes/project-routes.js:13` mounts it with `req.proj` supplied.
-4. **`web/src/views/Batch.jsx`** — avatar + background upload areas at the top, sheet summary,
-   settings (prompt collapsed under Advanced), sections list. New route beside `/p/:id/*` in
-   `web/src/App.jsx:19`. Do **not** use `StepHead` (hard-depends on the global `STEPS`).
-5. **Verification gates** — parser ($0, done) → prompt ($0) → Wasabi probe ($0) →
-   **one 27s row (~$1.36)** → **one whole section 1.0 (~$10.88)** → the rest.
-   Never start 109 rows before a human has watched a stitched section.
+   (no region segment; getting it wrong is a silent 403). Never retry a 403; halt if the
+   first upload of a run 403s. Export `putClip(cfg, {section, id, file})` and `check(cfg)` —
+   `batch.js` imports the module lazily and `GET /batch/wasabi-check` calls `check`, so a run
+   without it renders and keeps clips locally rather than failing. **Blocked on
+   `WASABI_SECRET_KEY` and `WASABI_REGION`.**
+3. ~~`server/routes/batch.js`~~ — **done**, mounted in the `ROUTERS` map.
+4. ~~`web/src/views/Batch.jsx`~~ — **done.** The nine-step pipeline UI was deleted, not
+   hidden: seven views, the rail, `ProjectProvider`, `StepHead`, `ImproveField`,
+   `ModelPicker` and manual mode are gone. The server routes stay — `jobs.js` is what the
+   runner enqueues through. Projects now land on `/b/:id`.
+5. **Verification gates** — gate 1 (parser, $0) **passed**. Next: prompt ($0, expand a row
+   on the page or `GET /batch/row/:id/quote`) → Wasabi probe ($0, needs step 2) →
+   **one 27s row (~$1.36), not row 1.1** — 1.1 is a 30s script in a 30s clip, zero tail, so
+   it cannot exercise the thing that actually goes wrong → **one whole section 1.0
+   (~$10.88)** → the rest. Never start 109 rows before a human has watched a stitched
+   section.
+
+**Nothing has been rendered. Nothing has been spent.** The sheet has not been imported to
+disk either — only previewed.
 
 ## Stage 2 (later, not started)
 
