@@ -98,27 +98,38 @@ Editor, Sheets API enabled. So the runner can tick `Complete` itself as each seg
 ## Next steps, in order
 
 1. ~~`server/lib/batch.js`~~ — **done.**
-2. **`server/lib/wasabi.js`** — `@aws-sdk/client-s3`. Keys `<prefix>/clips/<section>/<id>.mp4`
-   and `<prefix>/sections/<id>.mp4`. **Special-case `us-east-1` → `https://s3.wasabisys.com`**
-   (no region segment; getting it wrong is a silent 403). Never retry a 403; halt if the
-   first upload of a run 403s. Export `putClip(cfg, {section, id, file})` and `check(cfg)` —
-   `batch.js` imports the module lazily and `GET /batch/wasabi-check` calls `check`, so a run
-   without it renders and keeps clips locally rather than failing. **Blocked on
-   `WASABI_SECRET_KEY` and `WASABI_REGION`.**
+2. ~~`server/lib/wasabi.js`~~ — **done and proven live.** Bucket `acelerace-bucket`,
+   prefix `lesson1`, region **`us-central-1`** (discovered from the bucket, not guessed —
+   so the endpoint is `s3.us-central-1.wasabisys.com`, *not* the `us-east-1` special case).
+   `npm run check:wasabi` round-trips a 1 KB object and deletes it. A 403 is never retried
+   and halts the run on the spot.
 3. ~~`server/routes/batch.js`~~ — **done**, mounted in the `ROUTERS` map.
 4. ~~`web/src/views/Batch.jsx`~~ — **done.** The nine-step pipeline UI was deleted, not
    hidden: seven views, the rail, `ProjectProvider`, `StepHead`, `ImproveField`,
    `ModelPicker` and manual mode are gone. The server routes stay — `jobs.js` is what the
    runner enqueues through. Projects now land on `/b/:id`.
-5. **Verification gates** — gate 1 (parser, $0) **passed**. Next: prompt ($0, expand a row
-   on the page or `GET /batch/row/:id/quote`) → Wasabi probe ($0, needs step 2) →
-   **one 27s row (~$1.36), not row 1.1** — 1.1 is a 30s script in a 30s clip, zero tail, so
-   it cannot exercise the thing that actually goes wrong → **one whole section 1.0
-   (~$10.88)** → the rest. Never start 109 rows before a human has watched a stitched
-   section.
+5. **Verification gates** — gates 1–3 **passed, $0 spent**:
+   - *parser* — 109 rows, sections `[8,15,12,17,13,12,10,13,9]`, the id collision handled.
+   - *prompt* — 0 placeholders left, script verbatim in all 109, stop instruction in all 109,
+     677–838 chars against a 20,000 limit. Measured tail: `{0s:21, 1s:26, 2s:34, 3s:24, 4s:4}`
+     — **88 of 109 clips carry 1–4s of tail**, confirming the estimate from real data.
+   - *Wasabi* — 1 KB object written, headed and deleted at `lesson1/.healthcheck.txt`.
 
-**Nothing has been rendered. Nothing has been spent.** The sheet has not been imported to
-disk either — only previewed.
+   Next, and **not yet run**: **one 27s row (~$1.36) — segment 1.17**, a 27s script in a 30s
+   clip with no Visual, i.e. a real 3-second tail. Not row 1.1: that is 30s in 30s, zero
+   tail, so it cannot exercise the thing that actually goes wrong. Then **one whole section
+   1.0 (~$10.88)**, stitched and watched, before anything else.
+
+**Nothing has been rendered. Nothing has been spent.** The sheet *is* now imported to disk
+(`rows.json`, 109 rows) and `avatar.png` / `background.png` are copied into the project dir.
+
+⚠️ **The $10 credit floor costs a section.** Live budget: $147.14 outstanding, and $92.30
+reaches sections **1.0–1.3 ($70.50)**, not 1.0–1.4. The plan's "$88.18, five sections"
+ignored the floor — $88.18 + $10 is $98.18, over the balance. Dropping the floor to $4 or
+less would fit section 1.4; leaving it at $10 stops a section earlier, on purpose.
+
+Live per-section cost, confirmed against `/video/quote`, matches the plan exactly:
+`[10.88, 20.18, 16.32, 23.12, 17.68, 16.32, 12.72, 17.68, 12.24]`.
 
 ## Stage 2 (later, not started)
 

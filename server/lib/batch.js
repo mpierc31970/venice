@@ -317,9 +317,19 @@ export async function buildRequest(dir, settings, row) {
 // prompt, no images — so the price depends on duration alone and caches per duration.
 const priceCache = new Map(); // "model|duration|resolution|aspect|audio" -> number
 
-/** The price field name varies by model; probe it the way the UI does (Shots.jsx:149). */
-export const priceOf = (q) =>
-  q?.price ?? q?.usd ?? q?.cost ?? (typeof q === "number" ? q : null);
+/**
+ * Pull the price out of a /video/quote answer.
+ * Wan replies `{ quote: 1.36 }` — the number is nested — and other models have been seen
+ * to use price/usd/cost, so the wrapper is unwrapped first and then every known field
+ * name tried. It returns null rather than guessing, and a null halts the row: an
+ * unpriced render is an unbudgeted one.
+ */
+export function priceOf(q) {
+  if (q == null) return null;
+  if (typeof q === "number") return q;
+  if (q.quote !== undefined) return priceOf(q.quote);
+  return q.price ?? q.usd ?? q.cost ?? null;
+}
 
 export async function quoteRow(settings, row) {
   const body = {
@@ -491,6 +501,13 @@ async function loop(dir, run, only, onlyRows) {
         await renderRow(dir, settings, run, row, request, quote);
         consecutiveFailures = 0;
       } catch (e) {
+        // A 403 from Wasabi is a configuration answer, not a transient one. Halting on
+        // the first one is the difference between one wasted clip and 109.
+        if (e.fatal) {
+          run.reason = `halted: ${e.message}`;
+          log(run, run.reason);
+          return;
+        }
         consecutiveFailures += 1;
         run.failed += 1;
         await patchRow(dir, row.id, (r) => { r.status = "failed"; r.error = e.message; r.at = new Date().toISOString(); });
@@ -560,14 +577,10 @@ export async function balanceUsd() {
   } catch { return null; }
 }
 
-/**
- * Wasabi upload. server/lib/wasabi.js is the next piece of work and does not exist
- * yet, so a run without it renders and keeps clips locally — it does not fail.
- */
+/** Upload the clip. With no bucket configured a run still renders and keeps clips locally. */
 async function uploadClip(dir, settings, row, absFile) {
-  if (!settings.wasabi?.bucket) return null;
-  let wasabi;
-  try { wasabi = await import("./wasabi.js"); } catch { return null; }
+  if (!settings.wasabi?.bucket && !process.env.WASABI_BUCKET) return null;
+  const wasabi = await import("./wasabi.js");
   return wasabi.putClip(settings.wasabi, { section: row.section, id: row.id, file: absFile });
 }
 

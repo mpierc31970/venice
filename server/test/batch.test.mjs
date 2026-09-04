@@ -113,6 +113,8 @@ console.log("\ntimeline");
 
 /* -------------------------------------------------------------- quote ---- */
 console.log("\nquote");
+eq(priceOf({ quote: 1.36 }), 1.36, "priceOf unwraps Wan's { quote: 1.36 } — the live shape");
+eq(priceOf({ quote: { usd: 1.14 } }), 1.14, "priceOf unwraps a nested object quote");
 eq(priceOf({ price: 1.36 }), 1.36, "priceOf reads .price");
 eq(priceOf({ usd: 1.14 }), 1.14, "priceOf reads .usd");
 eq(priceOf({ cost: 0.91 }), 0.91, "priceOf reads .cost");

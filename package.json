@@ -12,6 +12,7 @@
     "test:jobs": "node server/test/jobs-race.test.mjs",
     "test:sheet": "node server/test/sheet.test.mjs",
     "test:batch": "node server/test/batch.test.mjs",
+    "check:wasabi": "node --env-file=.env server/test/wasabi.check.mjs",
     "stream": "node --env-file=.env stream-chat.js"
   },
   "devDependencies": {
