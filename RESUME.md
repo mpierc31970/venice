@@ -131,16 +131,40 @@ less would fit section 1.4; leaving it at $10 stops a section earlier, on purpos
 Live per-section cost, confirmed against `/video/quote`, matches the plan exactly:
 `[10.88, 20.18, 16.32, 23.12, 17.68, 16.32, 12.72, 17.68, 12.24]`.
 
-## Stage 2 (later, not started)
+## Stage 2 — Remotion is the master
 
-Remotion project for stitching, generated graphics, PiP, and the timeline (Remotion Studio *is*
-the timeline — don't build one). `timeline/<section>.json` is the seam; it carries `trimAfter`
-per segment so the snap-up padding is cut at assembly. **Decided:** the Visual column is Remotion's, never
-the video model's — Wan is not told about the graphics, and `buildTimeline` carries each
-note through to `timeline/<section>.json`. **Still open:** what says a segment is full-frame
-vs PiP and which graphic shows — the sheet has prose Visual text on 11 of 109 rows.
-Remotion licensing is **settled: free** — the licence only charges above three people, and
-this is a one-person project.
+**Decided 2026-09-03.** Remotion does the work: it reads `timeline/<section>.json`, stitches
+the segments at their trim points, carries the transitions and the generated graphics, and
+renders `sections/<section>.mp4`. Remotion Studio *is* the timeline — do not build one.
+Licensing is free: the licence only charges above three people, and this is one.
+
+**Premiere is a one-way escape hatch, not a partner.** `timeline/<section>.xml` (FCP7
+xmeml, `server/lib/premiere.js`) exists so the raw trimmed clips can be pulled into
+Premiere for a final polish if one is wanted. It is deliberately **not** kept in step with
+what Remotion produces, and there is no round-trip: an edit made in Premiere stays in
+Premiere. That is the whole reason the design is simple — nothing has to reconcile.
+
+So do not build: an XML importer, a sync mechanism, or anything that reads a Premiere
+project back. If a Premiere edit ever needs to become the master, that is a new decision.
+
+```
+remotion/
+  src/Root.tsx            one <Composition> per section
+  src/Section.tsx         <Series> of segments, cut at trimAfter
+  src/Segment.tsx         one segment: talking head, full-frame or PiP
+  src/visuals/            the graphic components
+```
+
+`timeline/<section>.json` is the seam and already exists — `writeTimeline` fires the moment
+every row in a section is rendered. It carries `trimAfter` per segment so the snap-up
+padding is cut at assembly rather than reaching the viewer.
+
+**Still open:** what says a segment is full-frame vs PiP and which graphic shows. The sheet
+has prose Visual text on 11 of 109 rows, and Wan is never told about it.
+
+**Not yet started, and can be verified without spending anything** — Remotion can render
+its own test clips (solid colours with a burned-in frame counter), so the stitching and the
+trim points can be proven before a single Venice clip exists.
 
 ## Environment notes
 
