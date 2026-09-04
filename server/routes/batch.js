@@ -8,6 +8,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { httpError, inside } from "../lib/store.js";
 import { saveBase64 } from "../lib/media.js";
+import { listJobs } from "../lib/jobs.js";
 import {
   readSettings, writeSettings, readState, listRows, sections, importSheet,
   buildPrompt, forgetImages, quoteRow, sectionCost, isPending, balanceUsd,
@@ -36,6 +37,29 @@ async function budget(settings, list, balance) {
   return out;
 }
 
+/**
+ * Run state plus the live job behind the row in flight.
+ * Venice exposes only status, average_execution_time and execution_duration — there are
+ * no finer stages — so this is what honest progress looks like: which phase, how long it
+ * has been going, and what the average is. Not a real percentage.
+ */
+async function runWithJob(dir) {
+  const rs = runState(dir);
+  if (!rs.current?.jobId) return rs;
+  const job = (await listJobs(dir)).find((j) => j.id === rs.current.jobId);
+  if (!job) return rs;
+  return {
+    ...rs,
+    current: {
+      ...rs.current,
+      job: {
+        id: job.id, status: job.status, eta: job.eta, elapsed: job.elapsed,
+        submittedAt: job.submittedAt || null, error: job.error,
+      },
+    },
+  };
+}
+
 /** One quote per distinct duration, not per row. Never fatal to a page load. */
 async function priceByDuration(settings, list) {
   const out = {};
@@ -61,7 +85,7 @@ r.get("/", async (req, res, next) => {
     // and depend only on duration, so this is two calls for 109 rows, both cached.
     const prices = await priceByDuration(settings, list);
     res.json({
-      settings, run: runState(dir), balance, budget: cost,
+      settings, run: await runWithJob(dir), balance, budget: cost,
       sheetUrl: state.sheetUrl, importedAt: state.importedAt, warnings: state.warnings || [],
       images: await imageStatus(dir, settings),
       sections: list.map((s) => ({
@@ -141,6 +165,20 @@ async function assertReady(dir) {
   const rows = await listRows(dir);
   if (!rows.length) throw httpError(400, "No rows — import the sheet first");
   if (!rows.some(isPending)) throw httpError(400, "Nothing pending");
+  await assertNothingInFlight(dir);
+}
+
+/**
+ * The run is sequential by construction — it awaits each job's terminal state before
+ * enqueuing the next — but jobs.js polls one shared queue per project at CONCURRENCY 2.
+ * A job left PENDING by anything else would therefore be submitted alongside ours, so a
+ * run refuses to start while one exists rather than putting two renders in flight.
+ */
+async function assertNothingInFlight(dir) {
+  const busyJobs = (await listJobs(dir)).filter((j) => j.status === "PENDING" || j.status === "PROCESSING");
+  if (busyJobs.length) {
+    throw httpError(409, `${busyJobs.length} job(s) already queued or rendering (${busyJobs.map((j) => j.id).join(", ")}). Let them finish, or cancel them, before starting a run.`);
+  }
 }
 
 // POST /row/:rowId/render -> one row, the cheap test. Costs one clip.
@@ -151,6 +189,7 @@ r.post("/row/:rowId/render", async (req, res, next) => {
     if (!row) throw httpError(404, "No such segment " + req.params.rowId);
     if (row.sheetComplete) throw httpError(400, `Segment ${row.id} is marked Complete in the sheet`);
     await assertReadyImages(dir);
+    await assertNothingInFlight(dir);
     if (row.status !== "pending") await patchRow(dir, row.id, (x) => { x.status = "pending"; x.error = null; });
     res.json(await start(dir, { sections: [row.section], rows: [row.id] }));
   } catch (e) { next(e); }

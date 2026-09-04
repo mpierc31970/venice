@@ -208,3 +208,12 @@ tr:last-child td { border-bottom: 0; }
 .confirm .facts dt { color: var(--ink-3); }
 .confirm .facts dd { margin: 0; }
 .confirm .warnline { border-left: 3px solid var(--warn); background: var(--bg-2); padding: 9px 12px; border-radius: 0 var(--radius-s) var(--radius-s) 0; font-size: 13px; }
+
+/* Per-row render progress, right of the button. Reserves its width whether or not a
+   row is live, so rows do not shift sideways when one starts. */
+.prog { display: inline-flex; align-items: center; gap: 7px; width: 132px; flex: none; }
+.prog .bar { flex: 1; height: 3px; background: var(--bg-3); border-radius: 2px; overflow: hidden; }
+.prog .bar i { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }
+.prog .lbl { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.prog.ok .bar i { background: var(--ok); }
+.prog.bad .bar i { background: var(--danger); }

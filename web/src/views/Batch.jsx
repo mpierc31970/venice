@@ -43,6 +43,16 @@ export default function Batch({ id }) {
     return () => clearInterval(t);
   }, [running, load]);
 
+  // The server only learns a new elapsed every 8s, so the bar is interpolated from the
+  // job's submit time on a 1s tick. It moves smoothly and never claims to be finished:
+  // the estimate is Venice's average for the model, not a measurement of this clip.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+
   const run = (name, fn, okMsg) => async () => {
     setBusy(name);
     try { const r = await fn(); if (okMsg) toast(okMsg, "ok"); await load(); refreshBilling(); return r; }
@@ -137,8 +147,42 @@ export default function Batch({ id }) {
 
       <SettingsCard id={id} settings={settings} onSave={run} />
 
-      <Sections id={id} sections={sections} budget={budget} busy={busy} ask={askRow} />
+      <Sections id={id} sections={sections} budget={budget} busy={busy} ask={askRow} run={runInfo} now={now} />
     </div>
+  );
+}
+
+/* ------------------------------------------------------------- progress ---- */
+
+const clock = (s) => (s == null ? "—" : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`);
+
+/**
+ * What the row in flight is doing. Venice reports a phase and an average execution time,
+ * nothing finer, so the bar is elapsed against that average and stops short of full —
+ * a clip that runs longer than average is normal, and a bar pinned at 100% while nothing
+ * happens is a worse lie than one that stops at 95%.
+ */
+function Progress({ live, now }) {
+  if (!live) return <span className="prog" />;
+  const job = live.job;
+  const submitted = job?.submittedAt ? Date.parse(job.submittedAt) : null;
+  const elapsed = submitted ? (now - submitted) / 1000 : job?.elapsed ?? null;
+  const eta = job?.eta ?? null;
+
+  let label, pct, cls = "";
+  if (live.stage === "uploading") { label = "uploading"; pct = 100; cls = "ok"; }
+  else if (!job || job.status === "PENDING") { label = "queued"; pct = 4; }
+  else if (job.status === "PROCESSING") {
+    pct = eta && elapsed ? Math.min(95, Math.round((elapsed / eta) * 100)) : 10;
+    label = eta ? `${clock(elapsed)} / ~${clock(eta)}` : clock(elapsed);
+  } else if (job.status === "COMPLETED") { label = "downloading"; pct = 100; cls = "ok"; }
+  else { label = (job.status || "").toLowerCase(); pct = 100; cls = "bad"; }
+
+  return (
+    <span className={`prog live ${cls}`} title={job?.error || `Venice reports the phase and its average time for this model — ${eta ? `~${clock(eta)}` : "no average yet"} — not a true percentage`}>
+      <span className="bar"><i style={{ width: `${pct}%` }} /></span>
+      <span className="lbl">{label}</span>
+    </span>
   );
 }
 
@@ -381,7 +425,7 @@ function SettingsCard({ id, settings, onSave }) {
 
 /* ------------------------------------------------------------- sections ---- */
 
-function Sections({ id, sections, budget, busy, ask }) {
+function Sections({ id, sections, budget, busy, ask, run, now }) {
   const [open, setOpen] = useState({});
   const costOf = (sid) => budget?.sections?.find((b) => b.id === sid);
   if (!sections.length) return <div className="card"><Empty>Import the sheet to see the sections.</Empty></div>;
@@ -403,7 +447,7 @@ function Sections({ id, sections, budget, busy, ask }) {
             </header>
             {open[s.id] ? (
               <div className="stack" style={{ padding: "0 16px 14px" }}>
-                {s.rows.map((row) => <Row key={row.id} id={id} row={row} busy={busy} ask={ask} />)}
+                {s.rows.map((row) => <Row key={row.id} id={id} row={row} busy={busy} ask={ask} live={run?.current?.row === row.id ? run.current : null} now={now} />)}
               </div>
             ) : null}
           </div>
@@ -413,7 +457,7 @@ function Sections({ id, sections, budget, busy, ask }) {
   );
 }
 
-function Row({ id, row, busy, ask }) {
+function Row({ id, row, busy, ask, live, now }) {
   const [show, setShow] = useState(false);
   const st = STATUS[row.status] || STATUS.pending;
   return (
@@ -426,6 +470,7 @@ function Row({ id, row, busy, ask }) {
         {row.quote ? <span className="dim small" title="what this row actually cost">{money(row.quote)}</span> : null}
         <Button className="ghost xs" onClick={() => setShow(!show)}>{show ? "hide" : "prompt"}</Button>
         <Button className="xs" busy={busy === "row-" + row.id} disabled={row.sheetComplete || row.status === "rendering"} onClick={() => ask(row)} title={row.sheetComplete ? "Marked Complete in the sheet" : "Shows what it will cost and do, before it does it"}>Render this one{row.price != null ? ` · ${money(row.price)}` : ""}</Button>
+        <Progress live={live} now={now} />
       </div>
       {row.error ? <div className="small" style={{ color: "var(--danger)" }}>{row.error}</div> : null}
       {show ? (

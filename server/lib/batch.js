@@ -393,6 +393,21 @@ export function runState(dir) {
   return rest;
 }
 
+/**
+ * What the run still has to spend.
+ *
+ * A real run reads this straight from Venice, whose balance falls as clips are charged.
+ * A dry run charges nothing, so every section would look individually affordable and the
+ * walk would sail past the point where the real thing stops — the free rehearsal would
+ * then be lying about the paid performance, which is the one thing it must not do. So a
+ * dry run draws its own balance down by what it says it would spend.
+ */
+async function spendable(run) {
+  const balance = await balanceUsd();
+  if (balance == null) return null;
+  return run.dryRun ? balance - run.spent : balance;
+}
+
 /** Ask a run to stop. It finishes the row in flight — a clip already paid for is not abandoned. */
 export function stop(dir, reason = "stopped by hand") {
   const r = runners.get(dir);
@@ -462,7 +477,7 @@ async function loop(dir, run, only, onlyRows) {
     // A named-row run is exempt — it is an explicit, single, cheap test.
     const rows = pick(section);
     const cost = await rowsCost(settings, rows);
-    const balance = await balanceUsd();
+    const balance = await spendable(run);
     if (balance == null) {
       // Unknown balance is not permission to spend.
       run.reason = "cannot read the Venice balance — halting rather than rendering blind";
@@ -480,7 +495,7 @@ async function loop(dir, run, only, onlyRows) {
       if (run.stopping) { log(run, "stopping: " + run.reason); return; }
 
       const quote = await quoteRow(settings, row);
-      const bal = await balanceUsd();
+      const bal = await spendable(run);
       if (bal == null) {
         run.reason = "cannot read the Venice balance — halting rather than rendering blind";
         log(run, run.reason);
@@ -545,10 +560,13 @@ async function renderRow(dir, settings, run, row, request, quote) {
 
   const job = await enqueue(dir, { request, outFile, meta: { batchId: run.runId, rowId: row.id } });
   await patchRow(dir, row.id, (r) => { r.jobId = job.id; });
+  // So the page can show progress for the row in flight.
+  run.current = { ...run.current, jobId: job.id };
   log(run, `rendering ${row.id} (${row.duration}, $${quote.toFixed(2)}) as ${job.id}`, { rowId: row.id });
 
   const done = await awaitJob(job.id);
   if (done.status !== "COMPLETED") throw new Error(done.error || `job ${done.status}`);
+  run.current = { ...run.current, stage: "uploading" };
 
   run.spent += quote;
   run.rendered += 1;
