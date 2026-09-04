@@ -19,7 +19,7 @@ export default function Projects() {
     setBusy(true);
     try {
       const r = mode === "new" ? await api.post("/api/projects", form) : await api.post("/api/projects/open", { dir: form.dir });
-      nav(`/p/${r.id}/setup`);
+      nav(`/b/${r.id}`);
     } catch (e) { toast(e.message, "error"); } finally { setBusy(false); }
   };
 
@@ -56,7 +56,7 @@ export default function Projects() {
       {list === null ? <p className="dim">Loading…</p> : !list.length ? <p className="dim">No projects yet.</p> : (
         <div className="projects">
           {list.map((p) => (
-            <div key={p.id} className="card project" onClick={() => p.exists && nav(`/p/${p.id}/setup`)} style={{ opacity: p.exists ? 1 : 0.5 }}>
+            <div key={p.id} className="card project" onClick={() => p.exists && nav(`/b/${p.id}`)} style={{ opacity: p.exists ? 1 : 0.5 }}>
               <h3>{p.title}</h3>
               <div className="dir">{p.dir}</div>
               {!p.exists ? <span className="chip bad">folder missing</span> : null}

@@ -334,12 +334,15 @@ export async function quoteRow(settings, row) {
   return price;
 }
 
-/** What the remaining pending rows of a section will cost. */
-export async function sectionCost(settings, section) {
+/** What a set of rows will cost. Quotes are free, so this is safe to call on a page load. */
+export async function rowsCost(settings, rows) {
   let total = 0;
-  for (const row of section.rows.filter(isPending)) total += await quoteRow(settings, row);
+  for (const row of rows) total += await quoteRow(settings, row);
   return total;
 }
+
+/** What the remaining pending rows of a section will cost. */
+export const sectionCost = (settings, section) => rowsCost(settings, section.rows.filter(isPending));
 
 /* ------------------------------------------------------- job completion ---- */
 
@@ -399,7 +402,7 @@ const log = (r, message, extra = {}) => {
  * Returns immediately; the loop runs in the background so it survives the browser
  * closing. Poll `runState(dir)`.
  */
-export async function start(dir, { dryRun = false, sections: only = null } = {}) {
+export async function start(dir, { dryRun = false, sections: only = null, rows: onlyRows = null } = {}) {
   if (runners.get(dir)?.running) throw new Error("A run is already in progress for this folder");
 
   const runId = "run_" + stamp();
@@ -410,7 +413,7 @@ export async function start(dir, { dryRun = false, sections: only = null } = {})
   };
   runners.set(dir, state);
 
-  loop(dir, state, only).catch((e) => {
+  loop(dir, state, only, onlyRows).catch((e) => {
     state.reason = e.message;
     log(state, "run aborted: " + e.message);
   }).finally(() => {
@@ -422,12 +425,14 @@ export async function start(dir, { dryRun = false, sections: only = null } = {})
   return runState(dir);
 }
 
-async function loop(dir, run, only) {
+async function loop(dir, run, only, onlyRows) {
   const settings = await readSettings(dir);
   const all = await sections(dir);
-  const todo = all.filter((s) => (!only || only.includes(s.id)) && s.pending > 0);
+  // `onlyRows` is the single-row test: it renders exactly what was named, nothing else.
+  const pick = (s) => s.rows.filter((r) => isPending(r) && (!onlyRows || onlyRows.includes(r.id)));
+  const todo = all.filter((s) => (!only || only.includes(s.id)) && pick(s).length);
 
-  log(run, `${run.dryRun ? "dry run" : "run"} ${run.runId}: ${todo.length} section(s), ${todo.reduce((n, s) => n + s.pending, 0)} pending row(s)`);
+  log(run, `${run.dryRun ? "dry run" : "run"} ${run.runId}: ${todo.length} section(s), ${todo.reduce((n, s) => n + pick(s).length, 0)} pending row(s)`);
   if (!todo.length) { run.reason = "nothing pending"; return; }
 
   // Fail before spending anything if the references are missing.
@@ -440,21 +445,34 @@ async function loop(dir, run, only) {
 
     // The whole-section budget check is the point of the section ordering: starting a
     // section the balance cannot finish spends money on an undeliverable fragment.
-    const cost = await sectionCost(settings, section);
+    // A named-row run is exempt — it is an explicit, single, cheap test.
+    const rows = pick(section);
+    const cost = await rowsCost(settings, rows);
     const balance = await balanceUsd();
-    if (settings.stopBetweenSections && balance != null && balance < cost + settings.creditFloor) {
+    if (balance == null) {
+      // Unknown balance is not permission to spend.
+      run.reason = "cannot read the Venice balance — halting rather than rendering blind";
+      log(run, run.reason);
+      return;
+    }
+    if (!onlyRows && settings.stopBetweenSections && balance < cost + settings.creditFloor) {
       run.reason = `not enough credit for section ${section.id} ($${cost.toFixed(2)} + $${settings.creditFloor} floor, balance $${balance.toFixed(2)})`;
       log(run, run.reason);
       return;
     }
-    log(run, `section ${section.id}: ${section.pending} row(s), $${cost.toFixed(2)}`);
+    log(run, `section ${section.id}: ${rows.length} row(s), $${cost.toFixed(2)}`);
 
-    for (const row of section.rows.filter(isPending)) {
+    for (const row of rows) {
       if (run.stopping) { log(run, "stopping: " + run.reason); return; }
 
       const quote = await quoteRow(settings, row);
       const bal = await balanceUsd();
-      if (bal != null && bal < quote + settings.creditFloor) {
+      if (bal == null) {
+        run.reason = "cannot read the Venice balance — halting rather than rendering blind";
+        log(run, run.reason);
+        return;
+      }
+      if (bal < quote + settings.creditFloor) {
         run.reason = `low credits — $${bal.toFixed(2)} left, row ${row.id} needs $${quote.toFixed(2)} + $${settings.creditFloor} floor`;
         log(run, run.reason);
         return;
@@ -529,10 +547,16 @@ async function preserveExisting(absFile) {
   } catch { /* nothing there, which is the normal case */ }
 }
 
-async function balanceUsd() {
+/**
+ * Balance in USD, or null when Venice cannot be read.
+ * The live shape is { balances: { usd, diem } } — the older flat forms are kept as
+ * fallbacks. Getting this wrong reads as "no balance", and a null balance must never
+ * be treated as "plenty": the run halts instead.
+ */
+export async function balanceUsd() {
   try {
     const b = await getBalance();
-    return b?.USD ?? b?.usd ?? b?.balances?.USD ?? null;
+    return b?.balances?.usd ?? b?.balances?.USD ?? b?.usd ?? b?.USD ?? null;
   } catch { return null; }
 }
 

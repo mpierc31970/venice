@@ -9,8 +9,9 @@ import script from "./script.js";
 import shots from "./shots.js";
 import tts from "./tts.js";
 import jobs from "./jobs.js";
+import batch from "./batch.js";
 
-const ROUTERS = { bible, elements, assets, script, shots, tts, jobs };
+const ROUTERS = { bible, elements, assets, script, shots, tts, jobs, batch };
 
 async function loadProject(req, _res, next) {
   try {
