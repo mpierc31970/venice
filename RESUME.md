@@ -175,6 +175,13 @@ padding is cut at assembly rather than reaching the viewer.
    `avatar.motion: "none"`, `avatar.transition: "cut"`, and asserted in the tests.
 2. **Not PiP means full screen.** There is no third layout.
 3. **Subtitles on every segment**, verbatim from the Script column.
+4. **Cross-dissolve at every join, 6 frames** — a fifth of a standard one-second dissolve.
+   Fast enough to read as a cut, long enough to soften the position jump between two
+   independent generations of the same person. It falls inside the silence `trimAfter`
+   leaves after the last word, so it never blends one sentence into the next. Note this
+   does **not** contradict rule 1: a dissolve between two shots is not motion applied to
+   the presenter. `timeline.transition`, and `durationInFrames` already accounts for the
+   n-1 overlaps.
 
 ### What is on screen, and where it comes from
 

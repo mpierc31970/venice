@@ -636,13 +636,39 @@ async function markComplete(dir, row) {
 export const TRIM_SAFETY_S = 0.4;
 export const FPS = 30;
 
+/**
+ * Cross-dissolve at every join, deliberately faster than a normal one: a standard
+ * dissolve is around a second, this is 6 frames — a fifth of that. Long enough to soften
+ * the position jump between two independent generations of the same person, short enough
+ * that it reads as a cut rather than as an effect.
+ *
+ * It also lands where there is nothing to damage. `trimAfter` keeps ~12 frames of silence
+ * after the last word (the snap-up padding, minus the trim), so a 6-frame overlap falls
+ * inside that margin rather than blending one sentence into the next.
+ */
+export const TRANSITION = { kind: "crossDissolve", frames: 6 };
+
 export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 } = {}) {
   // Emphasis slides are chosen across the whole section, so two never land back to back.
   const slides = slidesForSection(section.rows);
+  const rendered = section.rows.filter((r) => RENDERED.has(r.status));
+  const cut = (r) => Math.min(
+    Math.round(parseInt(r.duration, 10) * fps),
+    Math.round((r.wantSeconds + TRIM_SAFETY_S) * fps)
+  );
+  // Each dissolve overlaps two clips, so the section is shorter than the sum of its
+  // segments by one transition per join — n-1, not n.
+  const overlap = TRANSITION.frames * Math.max(0, rendered.length - 1);
+  const durationInFrames = Math.max(0, rendered.reduce((n, r) => n + cut(r), 0) - overlap);
+
   return {
     section: section.id,
     label: section.label,
     fps, width, height,
+    durationInFrames,
+    // Uniform across every join. The avatar itself still never animates — a dissolve
+    // between two shots is not motion applied to the presenter.
+    transition: TRANSITION,
     // The avatar's treatment is fixed, not per-segment: a circle in the lower right when
     // a graphic has the frame, full screen otherwise. There is no third layout.
     //
@@ -658,7 +684,7 @@ export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 
       motion: "none",      // no zoom, no scale, no drift — ever
       transition: "cut",   // appears and disappears on a single frame boundary
     },
-    segments: section.rows.filter((r) => RENDERED.has(r.status)).map((r) => ({
+    segments: rendered.map((r) => ({
       id: r.id,
       clip: r.clip,
       clipFrames: Math.round(parseInt(r.duration, 10) * fps),
