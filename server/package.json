@@ -9,6 +9,7 @@
     "start": "node --env-file=../.env index.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1126.0",
     "express": "^4.21.2",
     "openai": "^6.0.0"
   }
