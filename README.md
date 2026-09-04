@@ -45,3 +45,39 @@ The top-bar balance chip turns amber/red under thresholds you set in Settings.
 - `web/` — React + Vite UI.
 - `server/scripts/smoke-pipeline.mjs <projectId>` — runs screenplay → shot list → keyframe → quote on a project.
 - Projects live in any folder you choose; the registry is at `~/.venice-studio/registry.json`.
+
+## Where things live
+
+Each pipeline step, screen by screen:
+
+| Step | UI | Server |
+| --- | --- | --- |
+| 1. Project setup | `web/src/views/Setup.jsx` | `server/routes/projects.js` (`DEFAULTS`), `server/lib/modelcache.js` (`models()`) |
+| 2. Story bible | `web/src/views/Bible.jsx` | `server/routes/bible.js` (`POST /extract`), `server/lib/prompts.js` (`BIBLE_SYSTEM`, `EXTRACT_SYSTEM`) |
+| 3. Characters & references | `web/src/views/Elements.jsx` | `server/routes/elements.js` (`POST /bakeoff`), `server/lib/prompts.js` (`referencePrompt()`, `editAnglePrompt()`, `ANGLE_INSTRUCTIONS`) |
+| 4. Scene assets | `web/src/views/Assets.jsx` | `server/routes/assets.js`, `server/lib/media.js` (`walk()`, `kindOf()`) |
+| 5. Script & shot list | `web/src/views/Script.jsx` | `server/routes/script.js`, `server/lib/prompts.js` (`SCREENPLAY_SYSTEM`, `SCENES_SYSTEM`, `SHOTLIST_SYSTEM`) |
+| 6. Keyframes | `web/src/views/Shots.jsx` (`mode=keyframes`) | `server/routes/shots.js`, `server/lib/prompts.js` (`KEYFRAME_SYSTEM`) |
+| 7. Render clips | `web/src/views/Shots.jsx` (`mode=render`) | `server/routes/shots.js` (`POST /:id/quote`, `POST /:id/render`), `server/lib/jobs.js` |
+| 8. Dialogue audio | `web/src/views/Shots.jsx` (`mode=dialogue`) | `server/routes/tts.js` (`POST /clone`) |
+| 9. Library | `web/src/views/Library.jsx` | `server/index.js` (`/media/:id/*`) |
+
+The mechanisms the method depends on:
+
+| Concept | Implementation |
+| --- | --- |
+| Canon block — world seed, verbatim descriptions, hard negatives | `loadCanon()` in `server/lib/canon.js`, `canonBlock()` in `server/lib/prompts.js` |
+| `@Element` prompt references | `elementBlock()` and `findElement()` in `server/lib/canon.js`, `VIDEO_PROMPT_SYSTEM` in `server/lib/prompts.js` |
+| Shot durations matched to the video model's ladder | `durationsFor()` in `server/lib/modelcache.js`, fed into `SHOTLIST_SYSTEM` in `server/lib/prompts.js` by `server/routes/script.js` |
+| Background job poller | `ensurePoller()` and `tick()` in `server/lib/jobs.js`; writes are serialized by `withJobs()` |
+| Tiny-file guard | `minVideoBytes()` in `server/lib/media.js`, enforced in `finish()` in `server/lib/jobs.js` |
+| Venice REST API client | `server/venice.js` — `veniceJson()` / `veniceBinary()` wrap every call, `VeniceError` carries the status through to the UI |
+| Quote before queue | `POST /:id/quote` in `server/routes/shots.js`, `videoQuote()` in `server/venice.js` |
+| ✦ Improve with Claude | `ImproveField()` in `web/src/components/ui.jsx`, `POST /improve` in `server/routes/bible.js`, `IMPROVE_SYSTEM()` in `server/lib/prompts.js` |
+| Manual mode (copy/paste prompting) | `copyPrompt()` in `web/src/components/manual.jsx` |
+| Top-bar balance chip | `BalanceChip()` in `web/src/components/ui.jsx`, `server/routes/billing.js`; thresholds in `DEFAULT_SETTINGS` in `server/lib/registry.js` |
+| Writing backends (Claude Code CLI, Venice, Gemini, OpenAI) | `server/lib/providers.js` (`resolve()`, `providerStatus()`), `server/lib/claudecode.js` (`cliAvailable()`, `client`), `server/lib/llm.js` (`complete()`, `completeJson()`) |
+| Model cache (`/models` live lists) | `models()` and `summarize()` in `server/lib/modelcache.js` |
+| Project registry (`~/.venice-studio/registry.json`) | `server/lib/registry.js` (`registerProject()`, `findProject()`, `getSettings()`) |
+| On-disk project layout | the `P` path map in `server/lib/store.js` |
+| Path-traversal guard on `/media` | `inside()` in `server/lib/store.js` |
