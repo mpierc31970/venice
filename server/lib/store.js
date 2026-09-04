@@ -66,4 +66,10 @@ export const P = {
   shotDir: (d, id) => path.join(d, "shots", id),
   shot: (d, id) => path.join(d, "shots", id, "shot.json"),
   jobs: (d) => path.join(d, "jobs.json"),
+  // Talking-head batch renderer
+  batch: (d) => path.join(d, "batch.json"),
+  rows: (d) => path.join(d, "rows.json"),
+  clip: (d, section, id) => path.join(d, "clips", section, id + ".mp4"),
+  timeline: (d, section) => path.join(d, "timeline", section + ".json"),
+  sectionVideo: (d, section) => path.join(d, "sections", section + ".mp4"),
 };
