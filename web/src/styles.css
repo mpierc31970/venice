@@ -200,3 +200,11 @@ tr:last-child td { border-bottom: 0; }
   .angles { grid-template-columns: repeat(2, 1fr); }
   .main { padding: 18px; }
 }
+
+/* Confirmation panel — the last thing between a click and a charge. */
+.backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.66); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 60; }
+.confirm { width: 100%; max-width: 620px; max-height: 86vh; overflow: auto; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5); }
+.confirm .facts { display: grid; grid-template-columns: 132px 1fr; gap: 8px 16px; margin: 0; font-size: 13px; }
+.confirm .facts dt { color: var(--ink-3); }
+.confirm .facts dd { margin: 0; }
+.confirm .warnline { border-left: 3px solid var(--warn); background: var(--bg-2); padding: 9px 12px; border-radius: 0 var(--radius-s) var(--radius-s) 0; font-size: 13px; }

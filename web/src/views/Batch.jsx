@@ -26,6 +26,7 @@ export default function Batch({ id }) {
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [confirm, setConfirm] = useState(null);
 
   const load = useCallback(async () => {
     try { setData(await api.get(`/api/projects/${id}/batch`)); }
@@ -52,14 +53,76 @@ export default function Batch({ id }) {
   if (!data) return <div className="page"><Spinner /></div>;
 
   const { settings, budget, balance, images, sections, run: runInfo } = data;
+  const allRows = sections.flatMap((s) => s.rows);
+  const nothingWatchedYet = !allRows.some((r) => ["rendered", "uploaded"].includes(r.status));
+  const where = settings.wasabi?.bucket
+    ? `${settings.wasabi.bucket}/${settings.wasabi.prefix ? settings.wasabi.prefix + "/" : ""}`
+    : null;
+
+  /** What a run is about to do, priced, before it does any of it. */
+  const askRun = () => {
+    const pending = (budget?.sections || []).filter((s) => s.pending);
+    const willRun = pending.filter((s) => s.fits);
+    const stopsAt = pending.find((s) => !s.fits);
+    const segments = willRun.reduce((n, s) => n + s.pending, 0);
+    const cost = willRun.reduce((t, s) => t + s.cost, 0);
+    if (!segments) return toast("Nothing the balance can start — top up, or lower the credit floor.", "info");
+    setConfirm({
+      title: "Run the batch",
+      cost,
+      facts: [
+        ["Renders", `${segments} segment${segments === 1 ? "" : "s"} across section${willRun.length === 1 ? "" : "s"} ${willRun[0].id}${willRun.length > 1 ? `–${willRun[willRun.length - 1].id}` : ""}`],
+        ["Cost", `${money(cost)} — ${money(balance)} now, about ${money(balance - cost)} left after`],
+        ["Order", "one clip at a time, section by section, in sheet order"],
+        ...(where ? [["Uploads to", `${where}clips/<section>/<segment>.mp4 — kept locally too`]] : [["Uploads", "no bucket configured — clips stay on this machine only"]]),
+        ...(settings.markCompleteInSheet ? [["Sheet", "each segment is ticked Complete as it lands"]] : []),
+        ["Stops when", [
+          stopsAt ? `section ${stopsAt.id} can't be finished (${money(stopsAt.cost)})` : null,
+          `the balance falls below a clip's price plus the ${money(settings.creditFloor)} floor`,
+          `${settings.maxConsecutiveFailures} failures in a row`,
+          "you press Stop — it finishes the clip in flight",
+        ].filter(Boolean).join("; ")],
+      ],
+      warn: [
+        "This spends real money, and there is no undo — a clip is charged whether you keep it or not.",
+        nothingWatchedYet
+          ? `Nothing has been rendered yet, so no finished clip has been watched. Rendering one 27s segment first (${money(allRows.find((r) => r.wantSeconds === 27)?.price ?? 1.36)}) is the cheap way to find out the framing and the ending are right.`
+          : null,
+      ].filter(Boolean),
+      confirmLabel: `Render ${segments} segment${segments === 1 ? "" : "s"} · ${money(cost)}`,
+      go: run("run", () => api.post(`/api/projects/${id}/batch/run`, {}), "Run started."),
+    });
+  };
+
+  /** The same, for one segment. */
+  const askRow = (row) => setConfirm({
+    title: `Render segment ${row.id}`,
+    cost: row.price,
+    facts: [
+      ["Segment", `${row.id} — section ${row.section}, ${row.wantSeconds}s of script in a ${row.duration} clip`],
+      ["Cost", `${money(row.price)} — ${money(balance)} now, about ${money(balance - (row.price || 0))} left after`],
+      ...(where ? [["Uploads to", `${where}clips/${row.section}/${row.id}.mp4`]] : []),
+      ...(settings.markCompleteInSheet ? [["Sheet", `row ${row.sheetRow} is ticked Complete when it lands`]] : []),
+      ["Scope", "this one segment only — it does not start the batch"],
+    ],
+    warn: [
+      "This spends real money, and there is no undo.",
+      row.status === "failed" ? "This row failed before. If the cause has not changed, it will cost again to fail again." : null,
+      ["rendered", "uploaded"].includes(row.status) ? "This segment already has a clip. The existing file is moved aside, not overwritten — but you pay for the new one." : null,
+    ].filter(Boolean),
+    confirmLabel: `Render ${row.id} · ${money(row.price)}`,
+    go: run("row-" + row.id, () => api.post(`/api/projects/${id}/batch/row/${row.id}/render`, {}), `Rendering segment ${row.id}.`),
+  });
 
   return (
     <div className="page stack">
+      <Confirm ask={confirm} onCancel={() => setConfirm(null)} />
+
       <BudgetLine budget={budget} balance={balance} sections={sections} />
 
       <RunBar
         id={id} run={runInfo} busy={busy} load={load}
-        onRun={run("run", () => api.post(`/api/projects/${id}/batch/run`, {}), "Run started.")}
+        onRun={askRun}
         onDry={run("dry", () => api.post(`/api/projects/${id}/batch/run`, { dryRun: true }), "Dry run started — nothing will be rendered.")}
         onStop={run("stop", () => api.post(`/api/projects/${id}/batch/stop`, {}), "Stopping after the current segment.")}
       />
@@ -74,7 +137,51 @@ export default function Batch({ id }) {
 
       <SettingsCard id={id} settings={settings} onSave={run} />
 
-      <Sections id={id} sections={sections} budget={budget} busy={busy} onRender={run} />
+      <Sections id={id} sections={sections} budget={budget} busy={busy} ask={askRow} />
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------- confirm ---- */
+
+/**
+ * The last thing between a click and a charge. Built as a panel rather than a
+ * window.confirm so it can show the actual breakdown — what renders, what it costs, what
+ * is left afterwards, and what will stop it — instead of one line of text.
+ */
+function Confirm({ ask, onCancel }) {
+  // Escape cancels: the safe outcome should be the easy one.
+  useEffect(() => {
+    if (!ask) return;
+    const onKey = (e) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ask, onCancel]);
+  if (!ask) return null;
+
+  const go = async () => { onCancel(); await ask.go(); };
+  return (
+    <div className="backdrop" onClick={onCancel}>
+      <div className="card confirm" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <header>
+          <h2>{ask.title}</h2>
+          <span className="grow" />
+          <span className="chip warn">{money(ask.cost)}</span>
+        </header>
+
+        <dl className="facts">
+          {ask.facts.map(([k, v]) => <React.Fragment key={k}><dt>{k}</dt><dd>{v}</dd></React.Fragment>)}
+        </dl>
+
+        {ask.warn.map((w, i) => <div key={i} className="warnline">{w}</div>)}
+
+        <div className="row">
+          <Button className="primary" onClick={go}>{ask.confirmLabel}</Button>
+          <Button className="ghost" onClick={onCancel}>Cancel</Button>
+          <span className="grow" />
+          <span className="dim small">Esc to cancel</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -275,7 +382,7 @@ function SettingsCard({ id, settings, onSave }) {
 
 /* ------------------------------------------------------------- sections ---- */
 
-function Sections({ id, sections, budget, busy, onRender }) {
+function Sections({ id, sections, budget, busy, ask }) {
   const [open, setOpen] = useState({});
   const costOf = (sid) => budget?.sections?.find((b) => b.id === sid);
   if (!sections.length) return <div className="card"><Empty>Import the sheet to see the sections.</Empty></div>;
@@ -297,7 +404,7 @@ function Sections({ id, sections, budget, busy, onRender }) {
             </header>
             {open[s.id] ? (
               <div className="stack" style={{ padding: "0 16px 14px" }}>
-                {s.rows.map((row) => <Row key={row.id} id={id} row={row} busy={busy} onRender={onRender} />)}
+                {s.rows.map((row) => <Row key={row.id} id={id} row={row} busy={busy} ask={ask} />)}
               </div>
             ) : null}
           </div>
@@ -307,12 +414,9 @@ function Sections({ id, sections, budget, busy, onRender }) {
   );
 }
 
-function Row({ id, row, busy, onRender }) {
+function Row({ id, row, busy, ask }) {
   const [show, setShow] = useState(false);
   const st = STATUS[row.status] || STATUS.pending;
-  const render = onRender("row-" + row.id,
-    () => api.post(`/api/projects/${id}/batch/row/${row.id}/render`, {}),
-    `Rendering segment ${row.id}.`);
   return (
     <div style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }}>
       <div className="row" style={{ gap: 10, alignItems: "baseline" }}>
@@ -323,7 +427,7 @@ function Row({ id, row, busy, onRender }) {
         {row.visual ? <span className="chip" title={`For stage 2, not sent to the video model — ${row.visual}`}>visual</span> : null}
         {row.quote ? <span className="dim small" title="what this row actually cost">{money(row.quote)}</span> : null}
         <Button className="ghost xs" onClick={() => setShow(!show)}>{show ? "hide" : "prompt"}</Button>
-        <Button className="xs" busy={busy === "row-" + row.id} disabled={row.sheetComplete || row.status === "rendering"} onClick={render} title={row.sheetComplete ? "Marked Complete in the sheet" : "Renders this one segment now, and charges for it"}>Render this one{row.price != null ? ` · ${money(row.price)}` : ""}</Button>
+        <Button className="xs" busy={busy === "row-" + row.id} disabled={row.sheetComplete || row.status === "rendering"} onClick={() => ask(row)} title={row.sheetComplete ? "Marked Complete in the sheet" : "Shows what it will cost and do, before it does it"}>Render this one{row.price != null ? ` · ${money(row.price)}` : ""}</Button>
       </div>
       {row.error ? <div className="small" style={{ color: "var(--danger)" }}>{row.error}</div> : null}
       {show ? (
