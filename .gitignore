@@ -3,3 +3,4 @@ node_modules/
 web/dist/
 server.log
 vite.log
+graphify-out/
