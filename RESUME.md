@@ -4,9 +4,9 @@ Written 2026-09-03. Approved plan: `C:\Users\guypa\.claude\plans\so-i-have-found
 
 ## What this is
 
-Venice Studio is being repurposed. The nine-step "story bible" film pipeline is not
-being used (and not deleted). The actual job: render a narrated CEU course lesson as
-talking-head clips, stitch them into section videos, push to Wasabi.
+Venice Studio has been repurposed. The nine-step "story bible" film pipeline's UI is
+deleted (its server routes remain; git has the views). The actual job: render a narrated
+CEU course lesson as talking-head clips, stitch them into section videos, push to Wasabi.
 
 ## Ground truth
 
