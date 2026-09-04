@@ -361,7 +361,6 @@ function SettingsCard({ id, settings, onSave }) {
             <label>Prompt template <span className="dim small">— {"{script}"} {"{duration}"} {"{section}"}</span></label>
             <textarea className="mono" rows={9} value={s.promptTemplate || ""} onChange={(e) => set("promptTemplate", e.target.value)} />
             <div className="hint">The closing instruction is what stops her starting a new sentence in the seconds after the script ends. Most clips have 1–4 of them.</div>
-            <div className="hint">The sheet's Visual notes are deliberately not sent to the video model — they describe a graphic for Remotion to lay over the clip in stage 2, and they reach it through timeline/&lt;section&gt;.json.</div>
           </div>
           <div className="field">
             <label>Negative prompt</label>
