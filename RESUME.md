@@ -165,8 +165,39 @@ remotion/
 every row in a section is rendered. It carries `trimAfter` per segment so the snap-up
 padding is cut at assembly rather than reaching the viewer.
 
-**Still open:** what says a segment is full-frame vs PiP and which graphic shows. The sheet
-has prose Visual text on 11 of 109 rows, and Wan is never told about it.
+### Fixed rules for Remotion (from the user, 2026-09-03)
+
+1. **PiP avatar: a circle in the lower right.** Never animated, never repositioned, same
+   size every time. A presenter who drifts around the frame between cuts reads as an
+   error, and a section is already 8–17 independent generations of one continuous take.
+2. **Not PiP means full screen.** There is no third layout.
+3. **Subtitles on every segment**, verbatim from the Script column.
+
+### What is on screen, and where it comes from
+
+- **Layout** — `r.visual ? "pip" : "full"`. The sheet's Visual column already chose: 11 of
+  109 rows, one or two per section, none in 1.8. `pip` means the *graphic* takes the frame
+  and the avatar shrinks to its circle — the notes describe comparisons, workflows and
+  decision guides, which are unreadable in a corner at this resolution.
+- **Subtitles** — `captionsFor()` in `server/lib/slides.js`, chunked to ~42 characters and
+  timed proportionally across the **scripted** seconds, not the clip: the tail is silence,
+  and captions spread over it drift later and later against the speech. Frame-accurate
+  timing later via `@remotion/install-whisper-cpp`, but **the words stay from the script** —
+  a transcript of a mispronunciation must not become the on-screen text of a CEU course.
+- **Emphasis slides** — `slideFor()`, 14 across the lesson, 1–3 per section, none where a
+  diagram already sits. Picks a normative sentence (`must`/`required`/`never`), 30–95
+  characters, self-contained (no back-references), and never two segments in a row.
+
+⚠️ **Everything on screen is lifted verbatim. Nothing is paraphrased or completed.** This
+is a Chapter 83 CEU lesson students are examined on; text on screen reads as more
+authoritative than narration, and the scripts deliberately withhold specifics — 1.18 names
+the three bleach-solution categories then says "each has a specific concentration and
+exposure time in the rule" without stating them. A helpful paraphrase filling those in
+would put a regulatory claim on screen that the script's author chose not to make.
+
+**Still open:** what the 11 diagrams actually *look like*. The sheet gives prose only
+("Chapter 83 bleach-solution categories by purpose"); nothing says the categories, layout
+or styling, and inventing them is exactly the risk above. Wan is never told about any of it.
 
 **Not yet started, and can be verified without spending anything** — Remotion can render
 its own test clips (solid colours with a burned-in frame counter), so the stitching and the

@@ -26,6 +26,7 @@ import { model as getModel } from "./modelcache.js";
 import { videoQuote, getBalance } from "../venice.js";
 import { fetchSheet, parseCsv, rowsFromSheet, groupSections, parseLadder, sectionSeconds } from "./sheet.js";
 import { setCells, colLetter, quoteTab } from "./gsheets.js";
+import { slidesForSection, captionsFor } from "./slides.js";
 
 /* ------------------------------------------------------------ settings ---- */
 
@@ -635,10 +636,17 @@ export const TRIM_SAFETY_S = 0.4;
 export const FPS = 30;
 
 export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 } = {}) {
+  // Emphasis slides are chosen across the whole section, so two never land back to back.
+  const slides = slidesForSection(section.rows);
   return {
     section: section.id,
     label: section.label,
     fps, width, height,
+    // The avatar's treatment is fixed, not per-segment: a circle in the lower right when
+    // a graphic has the frame, full screen otherwise. Never animated, never moved — a
+    // presenter who drifts around the frame between cuts reads as an error, and these
+    // segments are already 8 to 17 independent generations of one continuous take.
+    avatar: { pip: { shape: "circle", corner: "bottom-right", animated: false } },
     segments: section.rows.filter((r) => RENDERED.has(r.status)).map((r) => ({
       id: r.id,
       clip: r.clip,
@@ -656,6 +664,8 @@ export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 
       // editing the value here — Remotion reloads instantly and it costs nothing.
       layout: r.visual ? "pip" : "full",
       visual: r.visual || null,
+      slide: slides.get(r.id) || null,
+      captions: captionsFor(r, fps),
     })),
   };
 }
