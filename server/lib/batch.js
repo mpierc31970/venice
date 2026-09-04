@@ -365,10 +365,25 @@ export const sectionCost = (settings, section) => rowsCost(settings, section.row
 // jobs.js fires this hook for every job in every project, so it early-returns unless
 // the job is ours — mirroring shots.js:250. Registered once, at import.
 const waiters = new Map(); // jobId -> resolve
-onJobDone((dir, job) => {
+onJobDone(async (dir, job) => {
   if (!job.meta?.batchId) return;
   const resolve = waiters.get(job.id);
-  if (resolve) { waiters.delete(job.id); resolve(job); }
+  if (resolve) { waiters.delete(job.id); resolve(job); return; }
+
+  // No waiter means the run that started this job is gone — the server restarted while
+  // the clip was rendering, which `node --watch` does on any file edit. The clip was
+  // paid for either way, so record it rather than leaving the row "rendering" for ever
+  // with a finished mp4 sitting on disk beside it.
+  const rowId = job.meta.rowId;
+  if (!rowId) return;
+  try {
+    await patchRow(dir, rowId, (r) => {
+      if (job.status === "COMPLETED") { r.status = "rendered"; r.clip = job.outFile; r.error = null; }
+      else { r.status = "failed"; r.error = job.error || `job ${job.status}`; }
+      r.at = new Date().toISOString();
+    });
+    console.log(`[batch] recovered orphaned job ${job.id} for row ${rowId} (${job.status})`);
+  } catch (e) { console.error("[batch] orphan recovery", e.message); }
 });
 
 const JOB_TIMEOUT_MS = 30 * 60 * 1000;

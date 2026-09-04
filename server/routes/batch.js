@@ -8,7 +8,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { httpError, inside, P, exists } from "../lib/store.js";
 import { saveBase64 } from "../lib/media.js";
-import { listJobs } from "../lib/jobs.js";
+import { listJobs, ensurePoller } from "../lib/jobs.js";
 import { buildFcpXml, pixelsFor } from "../lib/premiere.js";
 import {
   readSettings, writeSettings, readState, listRows, sections, importSheet,
@@ -45,9 +45,15 @@ async function budget(settings, list, balance) {
  * has been going, and what the average is. Not a real percentage.
  */
 async function runWithJob(dir) {
+  // A restart leaves the poller stopped, and nothing else on this page fetches /jobs, so
+  // a job left PROCESSING would never be polled and its paid-for clip never downloaded.
+  // Opening the page is enough to pick it back up.
+  const all = await listJobs(dir);
+  if (all.some((j) => j.status === "PENDING" || j.status === "PROCESSING")) ensurePoller(dir);
+
   const rs = runState(dir);
   if (!rs.current?.jobId) return rs;
-  const job = (await listJobs(dir)).find((j) => j.id === rs.current.jobId);
+  const job = all.find((j) => j.id === rs.current.jobId);
   if (!job) return rs;
   return {
     ...rs,
