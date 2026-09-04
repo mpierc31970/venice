@@ -199,9 +199,13 @@ const clock = (s) => (s == null ? "—" : `${Math.floor(s / 60)}:${String(Math.f
 function Progress({ live, now }) {
   if (!live) return <span className="prog" />;
   const job = live.job;
+  // Venice reports average_execution_time and execution_duration in MILLISECONDS. Read as
+  // seconds they turn a ten-minute render into a six-day one — the first live job came
+  // back as "eta 585507s".
+  const secs = (ms) => (ms == null ? null : ms / 1000);
   const submitted = job?.submittedAt ? Date.parse(job.submittedAt) : null;
-  const elapsed = submitted ? (now - submitted) / 1000 : job?.elapsed ?? null;
-  const eta = job?.eta ?? null;
+  const elapsed = submitted ? (now - submitted) / 1000 : secs(job?.elapsed);
+  const eta = secs(job?.eta);
 
   let label, pct, cls = "";
   if (live.stage === "uploading") { label = "uploading"; pct = 100; cls = "ok"; }
