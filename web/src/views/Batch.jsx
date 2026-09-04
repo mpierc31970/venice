@@ -138,6 +138,26 @@ export default function Batch({ id }) {
   };
 
   /** The same, for one segment. */
+  /**
+   * Undoing a section costs nothing by itself, and then costs the section again. The
+   * dialog says both halves out loud, because the button sits next to two free ones.
+   */
+  const askReset = (section) => {
+    const b = budget?.sections?.find((x) => x.id === section.id);
+    setConfirm({
+      title: `Reset section ${section.id}`,
+      rows: [
+        ["Puts back to pending", `${section.rows.length} segment${section.rows.length === 1 ? "" : "s"} — ${section.rows[0].id} to ${section.rows[section.rows.length - 1].id}`],
+        ["Clips on disk", "kept — each is moved aside when its replacement lands"],
+        ["Sheet", `the Complete mark is cleared for ${section.rows.length} row${section.rows.length === 1 ? "" : "s"}, or they could never run again`],
+        ["Costs now", "nothing — this renders nothing by itself"],
+      ],
+      warn: `Rendering this section again will cost ${b?.cost ? money(b.cost) : "what it cost the first time"}.`,
+      confirmLabel: `Reset section ${section.id}`,
+      go: run("reset-" + section.id, () => api.post(`/api/projects/${id}/batch/section/${section.id}/reset`, {}), `Section ${section.id} is pending again.`),
+    });
+  };
+
   const askRow = (row) => setConfirm({
     title: `Render segment ${row.id}`,
     cost: row.price,
@@ -181,7 +201,7 @@ export default function Batch({ id }) {
 
       <SettingsCard id={id} settings={settings} onSave={run} />
 
-      <Sections id={id} sections={sections} budget={budget} busy={busy} ask={askRow} askSection={askSection} run={runInfo} now={now} act={run} />
+      <Sections id={id} sections={sections} budget={budget} busy={busy} ask={askRow} askSection={askSection} askReset={askReset} run={runInfo} now={now} act={run} />
     </div>
   );
 }
@@ -480,7 +500,7 @@ function SettingsCard({ id, settings, onSave }) {
 
 /* ------------------------------------------------------------- sections ---- */
 
-function Sections({ id, sections, budget, busy, ask, askSection, run, now, act }) {
+function Sections({ id, sections, budget, busy, ask, askSection, askReset, run, now, act }) {
   const [open, setOpen] = useState({});
   const costOf = (sid) => budget?.sections?.find((b) => b.id === sid);
   if (!sections.length) return <div className="card"><Empty>Import the sheet to see the sections.</Empty></div>;
@@ -509,7 +529,7 @@ function Sections({ id, sections, budget, busy, ask, askSection, run, now, act }
             {open[s.id] ? (
               <div className="stack" style={{ padding: "0 16px 14px" }}>
                 {s.rows.map((row) => <Row key={row.id} id={id} row={row} busy={busy} ask={ask} live={run?.current?.row === row.id ? run.current : null} now={now} />)}
-                <SectionFooter id={id} section={s} busy={busy} act={act} />
+                <SectionFooter id={id} section={s} busy={busy} act={act} askReset={askReset} />
               </div>
             ) : null}
           </div>
@@ -524,7 +544,7 @@ function Sections({ id, sections, budget, busy, ask, askSection, run, now, act }
  * repeatable — it is deliberately not coupled to anything that costs money, so this can
  * be re-run as often as the graphics need tuning.
  */
-function SectionFooter({ id, section, busy, act }) {
+function SectionFooter({ id, section, busy, act, askReset }) {
   const done = section.rows.filter((r) => ["rendered", "uploaded"].includes(r.status)).length;
   if (!section.complete || !done) return null;
   const key = "tl-" + section.id;
@@ -546,6 +566,10 @@ function SectionFooter({ id, section, busy, act }) {
         Premiere XML
       </Button>
       {section.timeline ? <span className="dim small mono">{section.timeline}</span> : null}
+      <Button className="sm ghost" busy={busy === "reset-" + section.id} onClick={() => askReset(section)}
+        title="Puts every segment back to pending so the section can be rendered again with a changed prompt. Deletes no clip. Rendering it again costs the section again.">
+        Reset
+      </Button>
       <span className="grow" />
       {section.video
         ? <a className="btn sm" href={media(id, section.video)} target="_blank" rel="noreferrer">▶ Play section video</a>

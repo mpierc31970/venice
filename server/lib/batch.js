@@ -31,25 +31,65 @@ import { diagramFor } from "./diagrams.js";
 
 /* ------------------------------------------------------------ settings ---- */
 
-// The tail instruction is the one that matters. Duration snaps up to the model's
-// ladder, so most clips carry 1–4s of padding after the last word, and a model given
-// dead air invents a new sentence to fill it. What she does *instead* is left unsaid
-// on purpose: the tail is trimmed at assembly, so an idle-performance description
-// buys nothing and gives the model more to misread.
-export const PROMPT_TEMPLATE = `Talking-head video. Medium close-up of the woman from avatar @image1 — head and
-shoulders only, centered in frame, facing the camera. Background is @image2.
-Good lighting, fixed camera, no camera movement.
+// Two jobs, and the second one is why this is as long as it is.
+//
+// The tail instruction is the one that matters for a single clip. Duration snaps up to
+// the model's ladder, so most clips carry 1-4s of padding after the last word, and a
+// model given dead air invents a new sentence to fill it. What she does *instead* is
+// left unsaid on purpose: the tail is trimmed at assembly, so an idle-performance
+// description buys nothing and gives the model more to misread.
+//
+// Everything above the spoken line exists for the *cut*. Wan has no memory between
+// clips, so a section is 8-17 independent generations that have to look like one take,
+// and the only thing carrying framing from one to the next is this text. "Medium
+// close-up" was not enough — it is an interpretation, and Wan interpreted it differently
+// each time, drifting the shot size, the background scale and her position in frame.
+// Read at the join, that reads as a mistake. So the framing is stated geometrically
+// instead: where the top of her head sits, where her chin sits, what fills the lower
+// corners. Those are the same sentences every time and they describe one composition.
+//
+// The camera and background lines are absolute for the same reason. A clip that pushes
+// in even slightly ends on a different shot size than it began, so its last frame no
+// longer matches the next clip's first.
+export const PROMPT_TEMPLATE = `Static talking-head shot, locked-off camera on a tripod at eye level. One
+woman, alone in the room.
+
+Framing, the same in every frame: the woman from @image1, facing the camera and
+looking into the lens, centered left to right, framed from mid-chest up. A
+small, even gap above the top of her head. Her chin sits near the middle of the
+frame and her shoulders fill the lower corners. She stays this size and in this
+place from the first frame to the last.
+
+Background: the room from @image2 exactly as given, filling the frame edge to
+edge at its own scale and its own framing. Do not crop it, zoom into it,
+re-frame it, relight it, redecorate it or replace it. Nothing in the background
+moves.
+
+The camera never moves: no zoom in, no zoom out, no push in, no pull back, no
+dolly, no track, no crane, no pan, no tilt, no roll, no handheld drift, no
+re-framing, no cut to another angle. The last frame has the same composition as
+the first.
 
 She speaks this line, and only this line: "{script}"
+
+Only her face moves as she speaks. She does not lean toward or away from the
+camera, does not stand up, and does not drift left or right.
 
 After the last word she simply stops speaking. No new sentence, no repetition,
 no further dialogue for the rest of the clip.`;
 
 // The grid terms are not boilerplate: avatar.png *is* a four-panel contact sheet, and
-// this is cheap insurance against the model echoing that layout into the video.
+// this is cheap insurance against the model echoing that layout into the video. The
+// camera terms are listed one by one rather than as "camera movement" because that is
+// how a negative prompt is read — a push-in is not obviously an instance of a category
+// it was never named as part of.
 export const NEGATIVE_PROMPT =
-  "full body, wide shot, walking, standing, multiple people, split screen, grid, " +
-  "contact sheet, side-by-side panels, camera movement, zoom, pan, text overlay";
+  "full body, wide shot, walking, standing up, leaning toward the camera, leaning back, " +
+  "multiple people, split screen, grid, contact sheet, side-by-side panels, " +
+  "camera movement, camera shake, handheld, zoom in, zoom out, push in, pull back, " +
+  "dolly, tracking shot, crane, pan, tilt, reframing, changing shot size, jump cut, " +
+  "scene change, changing background, cropped background, letterbox, black bars, " +
+  "text overlay";
 
 export const DEFAULTS = {
   sheetUrl: process.env.SHEET_URL || "",
@@ -434,6 +474,57 @@ export function clearRun(dir) {
   if (r?.running) throw new Error("A run is in progress — stop it before clearing");
   runners.delete(dir);
   return { running: false };
+}
+
+/**
+ * Put a section back to pending so it can be rendered again — after a prompt change,
+ * which is the only reason worth paying twice for the same words.
+ *
+ * Deletes nothing. The clips stay where they are and `preserveExisting` moves each one
+ * aside the moment its replacement lands, so the old take survives even after the new
+ * one is paid for. `timeline/<id>.json` and `sections/<id>.mp4` also stay: they describe
+ * the clips that are still on disk, and both are free to rebuild once the new ones land.
+ *
+ * The sheet's Complete column has to be cleared too, and it is the part that is easy to
+ * forget: it outranks our own state everywhere, so a row left marked would sit at
+ * "complete" for ever no matter what rows.json says. A run refuses to start while one is
+ * in flight, so this does too.
+ */
+export async function resetSection(dir, sectionId) {
+  if (runners.get(dir)?.running) throw new Error("A run is in progress — stop it before resetting a section");
+
+  const all = await listRows(dir);
+  const rows = all.filter((r) => r.section === sectionId);
+  if (!rows.length) throw new Error(`No section ${sectionId}`);
+
+  // Clear the sheet first. If this throws, nothing local has changed yet and the section
+  // is still consistent — the other order leaves rows that look runnable but are not.
+  const state = await readState(dir);
+  const col = state.columns?.complete;
+  const marked = rows.filter((r) => r.sheetRow);
+  if (state.sheetUrl && col != null && marked.length) {
+    const tab = state.tab ? quoteTab(state.tab) + "!" : "";
+    await setCells(state.sheetUrl, marked.map((r) => ({ range: `${tab}${colLetter(col)}${r.sheetRow}`, value: "" })));
+  }
+
+  const ids = new Set(rows.map((r) => r.id));
+  await withRows(dir, (s) => {
+    for (const row of s.rows) {
+      if (!ids.has(row.id)) continue;
+      Object.assign(row, {
+        status: "pending",
+        sheetComplete: false,
+        jobId: null,
+        clip: null,
+        wasabiKey: null,
+        quote: null,
+        error: null,
+        at: null,
+      });
+    }
+  });
+
+  return { section: sectionId, rows: rows.length, unmarkedInSheet: state.sheetUrl && col != null ? marked.length : 0 };
 }
 
 /** Ask a run to stop. It finishes the row in flight — a clip already paid for is not abandoned. */

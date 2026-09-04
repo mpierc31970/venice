@@ -11,7 +11,10 @@
  * from their own average, which for a talking head lands on her.
  *
  * Results are cached in focus/<section>.json next to timeline/<section>.json, keyed by
- * segment id, and only pip segments are measured — nothing else is cropped.
+ * segment id, and only pip segments are measured — nothing else is cropped. The cache
+ * records the clip's size and modification time alongside the measurement, so a segment
+ * re-rendered under a changed prompt is measured again rather than inheriting the
+ * framing of the take it replaced.
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -87,19 +90,27 @@ export function readFocus(dir, section) {
 }
 
 /**
- * Measure any pip segment in this timeline that has not been measured yet, and return the
- * whole map. Cheap to call: a clip already in the file is never re-measured.
+ * Measure any pip segment whose clip is new or has changed on disk, and return the whole
+ * map. Cheap to call: an unchanged clip is never re-measured.
  */
 export function ensureFocus(dir, timeline, log = () => {}) {
   const pip = timeline.segments.filter((s) => s.layout === "pip");
   const have = readFocus(dir, timeline.section);
-  const missing = pip.filter((s) => !have[s.id]);
+  const stale = (segment) => {
+    const cached = have[segment.id];
+    if (!cached) return true;
+    const { size, mtimeMs } = fs.statSync(path.join(dir, segment.clip));
+    return cached.size !== size || cached.mtimeMs !== mtimeMs;
+  };
+  const missing = pip.filter(stale);
   if (!missing.length) return have;
 
   const ffmpeg = ffmpegPath();
   for (const segment of missing) {
-    const f = measure(path.join(dir, segment.clip), ffmpeg);
-    have[segment.id] = { x: Number(f.x.toFixed(4)), y: Number(f.y.toFixed(4)) };
+    const clip = path.join(dir, segment.clip);
+    const f = measure(clip, ffmpeg);
+    const { size, mtimeMs } = fs.statSync(clip);
+    have[segment.id] = { x: Number(f.x.toFixed(4)), y: Number(f.y.toFixed(4)), size, mtimeMs };
     log(`focus ${segment.id}  x=${have[segment.id].x}  y=${have[segment.id].y}`);
   }
   fs.mkdirSync(path.dirname(focusFile(dir, timeline.section)), { recursive: true });

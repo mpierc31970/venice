@@ -116,11 +116,14 @@ Editor, Sheets API enabled. So the runner can tick `Complete` itself as each seg
      — **88 of 109 clips carry 1–4s of tail**, confirming the estimate from real data.
    - *Wasabi* — 1 KB object written, headed and deleted at `lesson1/.healthcheck.txt`.
 
-   Gate 4 — **section 1.0 has been run, ~$10.88.** All 8 rows are `uploaded`; the clips are
-   at `clips/1.0/1.1.mp4` … `1.8.mp4` and the stitched section is `sections/1.0.mp4`. The
-   remaining 101 rows are `pending`. What is still owed is the *watching*: voice consistency
-   across eight independent generations, and whether the mid-sentence joins hold. Nothing
-   past section 1.0 should be run until someone has watched it end to end.
+   Gate 4 — **section 1.0 was run once, ~$10.88, and has been reset to run again.** The
+   first take is still on disk at `clips/1.0/1.1.mp4` … `1.8.mp4`, and `sections/1.0.mp4`
+   is the assembly of it. Watching it found the real problem, and it was not the assembly:
+   **Wan's framing drifts between clips.** The camera pushes in on some, the background
+   sits at a different scale on others, and she is a different size in the frame from one
+   clip to the next — so a cut that should read as one continuous take reads as a mistake.
+   See **The prompt, rewritten** below. All 8 rows are `pending` again and the sheet's
+   Complete marks are cleared; re-running costs the section a second time (~$10.88).
 
 ⚠️ **The $10 credit floor costs a section.** Live budget: $147.14 outstanding, and $92.30
 reaches sections **1.0–1.3 ($70.50)**, not 1.0–1.4. The plan's "$88.18, five sections"
@@ -129,6 +132,38 @@ less would fit section 1.4; leaving it at $10 stops a section earlier, on purpos
 
 Live per-section cost, confirmed against `/video/quote`, matches the plan exactly:
 `[10.88, 20.18, 16.32, 23.12, 17.68, 16.32, 12.72, 17.68, 12.24]`.
+
+## The prompt, rewritten (2026-09-04)
+
+Watching section 1.0 found the thing that actually breaks the illusion, and it is not in
+the assembly. **Wan reframes the shot between clips.** The camera pushes in on some, the
+background sits at a different scale on others, and she is a different size in frame from
+one clip to the next. A section is 8–17 independent generations that have to read as one
+take, and the only thing carrying framing across them is the prompt text.
+
+The old prompt said "medium close-up … head and shoulders … fixed camera, no camera
+movement". That is an *interpretation*, and Wan interpreted it differently every time. The
+new one states the composition geometrically instead — where the top of her head sits, where
+her chin sits, what fills the lower corners — plus absolute lines for the camera ("no zoom
+in, no zoom out, no push in, no pull back…") and for the background ("exactly as given,
+filling the frame edge to edge at its own scale and its own framing; nothing in it moves").
+The negative prompt names each camera move individually rather than relying on the category
+"camera movement". `PROMPT_TEMPLATE` and `NEGATIVE_PROMPT` in `server/lib/batch.js`, and
+**also written into `batch.json`** — a saved setting outranks the default, so changing the
+code alone would have left the old prompt in production.
+
+⚠️ **Untested. It has not rendered a single clip yet.** Render *one* row before the section
+— 1.17 is still the right one (a 27s script in a 30s clip, so it exercises the tail) — and
+put its first and last frame side by side. If the framing still drifts, the next lever is
+the avatar image, not more prompt words: `avatar.png` is a **four-panel contact sheet**, so
+the model is choosing among four framings before it starts. A single cropped headshot would
+remove that variable outright, at the cost of the "both images go in whole" decision.
+
+**Resetting a section** is `POST /api/projects/:id/batch/section/:id/reset`, or the *Reset*
+button in the section footer. It puts every row back to `pending`, clears the sheet's
+Complete marks (they outrank local state, so a row left marked could never run again) and
+**deletes nothing** — `preserveExisting` moves each old clip aside as its replacement
+lands, so the take you paid for survives the take that replaces it.
 
 ## Stage 2 — Remotion is the master
 

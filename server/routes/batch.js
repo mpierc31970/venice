@@ -13,7 +13,7 @@ import { buildFcpXml, pixelsFor } from "../lib/premiere.js";
 import {
   readSettings, writeSettings, readState, listRows, sections, importSheet,
   buildPrompt, forgetImages, quoteRow, sectionCost, isPending, balanceUsd,
-  start, stop, runState, clearRun, writeTimeline, patchRow,
+  start, stop, runState, clearRun, writeTimeline, patchRow, resetSection,
 } from "../lib/batch.js";
 
 const r = Router();
@@ -226,6 +226,14 @@ r.get("/row/:rowId/quote", async (req, res, next) => {
     if (!row) throw httpError(404, "No such segment " + req.params.rowId);
     res.json({ id: row.id, duration: row.duration, price: await quoteRow(settings, row), prompt: buildPrompt(settings, row) });
   } catch (e) { next(e); }
+});
+
+// POST /section/:sectionId/reset -> put a section back to pending so it can be rendered
+// again with a changed prompt. Deletes no clip and unmarks the sheet. Renders nothing
+// itself, but it is the door to spending the section's cost a second time.
+r.post("/section/:sectionId/reset", async (req, res, next) => {
+  try { res.json(await resetSection(req.proj.dir, req.params.sectionId)); }
+  catch (e) { next(httpError(e.message.startsWith("No section") ? 404 : 409, e.message)); }
 });
 
 // POST /section/:sectionId/timeline -> rewrite timeline/<id>.json. Free and repeatable.
