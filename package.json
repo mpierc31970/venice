@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": ["server", "web"],
+  "workspaces": [
+    "server",
+    "web"
+  ],
   "scripts": {
     "dev": "concurrently -n server,web -c blue,magenta \"npm run dev -w server\" \"npm run dev -w web\"",
     "build": "npm run build -w web",
@@ -17,7 +20,9 @@
     "test:slides": "node server/test/slides.test.mjs",
     "test:premiere": "node server/test/premiere.test.mjs",
     "check:wasabi": "node --env-file=.env server/test/wasabi.check.mjs",
-    "stream": "node --env-file=.env stream-chat.js"
+    "stream": "node --env-file=.env stream-chat.js",
+    "remotion": "npm --prefix remotion run studio",
+    "render:section": "node remotion/render.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

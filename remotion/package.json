@@ -1,0 +1,24 @@
+{
+  "name": "venice-remotion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Stage 2: reads timeline/<section>.json, renders sections/<section>.mp4",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.520",
+    "@remotion/cli": "^4.0.520",
+    "@remotion/renderer": "^4.0.520",
+    "@remotion/transitions": "^4.0.520",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "remotion": "^4.0.520"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "typescript": "^7.0.2"
+  }
+}

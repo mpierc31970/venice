@@ -70,6 +70,7 @@ late clip before the full run.
 - `server/routes/batch.js` — mounted at `/api/projects/:id/batch/*`. Only `POST /run`
   (without `dryRun`) and `POST /row/:id/render` cost money.
 - `web/src/views/Batch.jsx` — the whole interface, one page.
+- `remotion/` — stage 2, the assembler. See **Stage 2 — Remotion is the master** below.
 - `server/test/batch.test.mjs` — 43 assertions. `npm run test:batch`.
 - `.env` gained `GOOGLE_SERVICE_ACCOUNT_KEY` and `SHEET_URL`, then `WASABI_ACCESS_KEY`
   and `WASABI_BUCKET` (`acelerace-bucket`). **`WASABI_SECRET_KEY` and `WASABI_REGION` are
@@ -115,13 +116,11 @@ Editor, Sheets API enabled. So the runner can tick `Complete` itself as each seg
      — **88 of 109 clips carry 1–4s of tail**, confirming the estimate from real data.
    - *Wasabi* — 1 KB object written, headed and deleted at `lesson1/.healthcheck.txt`.
 
-   Next, and **not yet run**: **one 27s row (~$1.36) — segment 1.17**, a 27s script in a 30s
-   clip with no Visual, i.e. a real 3-second tail. Not row 1.1: that is 30s in 30s, zero
-   tail, so it cannot exercise the thing that actually goes wrong. Then **one whole section
-   1.0 (~$10.88)**, stitched and watched, before anything else.
-
-**Nothing has been rendered. Nothing has been spent.** The sheet *is* now imported to disk
-(`rows.json`, 109 rows) and `avatar.png` / `background.png` are copied into the project dir.
+   Gate 4 — **section 1.0 has been run, ~$10.88.** All 8 rows are `uploaded`; the clips are
+   at `clips/1.0/1.1.mp4` … `1.8.mp4` and the stitched section is `sections/1.0.mp4`. The
+   remaining 101 rows are `pending`. What is still owed is the *watching*: voice consistency
+   across eight independent generations, and whether the mid-sentence joins hold. Nothing
+   past section 1.0 should be run until someone has watched it end to end.
 
 ⚠️ **The $10 credit floor costs a section.** Live budget: $147.14 outstanding, and $92.30
 reaches sections **1.0–1.3 ($70.50)**, not 1.0–1.4. The plan's "$88.18, five sections"
@@ -153,12 +152,37 @@ PiP, for the case where a section wants cutting from scratch. It is deliberately
 in step with what Remotion produces, and there is no round-trip — an edit made in Premiere
 stays in Premiere. That is the whole reason the design is simple: nothing has to reconcile.
 
+**Built 2026-09-04.** It is a standalone npm project, not a workspace — Remotion wants
+React 19 and `web/` is on 18, so keeping its own `node_modules` avoids a hoist fight.
+
 ```
 remotion/
-  src/Root.tsx            one <Composition> per section
-  src/Section.tsx         <Series> of segments, cut at trimAfter
+  project-dir.mjs         resolves the project dir (VENICE_PROJECT_DIR, else the registry)
+  remotion.config.ts      publicDir = the project dir; Studio serves it directly
+  render.mjs              timeline/<s>.json -> sections/<s>.mp4, bundling once for all
+  src/Root.tsx            one <Composition> per timeline found on disk
+  src/Section.tsx         <TransitionSeries> of segments, cut at trimAfter
   src/Segment.tsx         one segment: talking head, full-frame or PiP
-  src/visuals/            the graphic components
+  src/Captions.tsx        the subtitle band
+  src/Slide.tsx           the emphasis card
+  src/visuals/Diagram.tsx list / sequence / comparison / points
+  src/timeline.ts         the shape of timeline/<s>.json — the only place that knows it
+  src/theme.ts            one palette, one font stack
+```
+
+The project directory **is** the public dir, so nothing is imported or kept in step:
+`staticFile("clips/1.0/1.4.mp4")` reads the clip the runner wrote. Two consequences —
+`remotion studio` lists every section that has a timeline, with no configuration; and
+`bundle()` copies the public dir on each invocation of `render.mjs` (106 MB at section
+1.0, ~1.4 GB once all 109 clips exist). That is one copy per invocation, not per section,
+which is why `render.mjs` bundles once and loops.
+
+Run it:
+
+```
+npm run remotion             # Studio — the timeline, and where graphics get changed
+node remotion/render.mjs     # every section that has a timeline
+node remotion/render.mjs 1.0 # just that one
 ```
 
 `timeline/<section>.json` is the seam and already exists — `writeTimeline` fires the moment
@@ -209,9 +233,17 @@ would put a regulatory claim on screen that the script's author chose not to mak
 ("Chapter 83 bleach-solution categories by purpose"); nothing says the categories, layout
 or styling, and inventing them is exactly the risk above. Wan is never told about any of it.
 
-**Not yet started, and can be verified without spending anything** — Remotion can render
-its own test clips (solid colours with a burned-in frame counter), so the stitching and the
-trim points can be proven before a single Venice clip exists.
+**Section 1.0 is rendered and stitched** — `sections/1.0.mp4`, 1920x1080, 7122 frames /
+237.4s, h264 + aac, 143 MB, from the 8 clips at `clips/1.0/`. The arithmetic is asserted
+before every render rather than eyeballed: composition length, `timeline.durationInFrames`
+and (sum of `trimAfter`) − 6 × joins must all agree, and `render.mjs` refuses the render if
+they do not. 8 × 30.02s of raw clip comes out as 237.4s, so the trims and the seven
+overlaps are both really happening.
+
+Watched: the full-frame layout and the PiP layout both read correctly, and the circle cuts
+in with no motion. **Not yet watched end to end by a human** — that is the next thing, and
+it is the point of gate 4: whether the voice holds across eight independent generations,
+and whether the mid-sentence joins survive a 6-frame dissolve.
 
 ## Environment notes
 
