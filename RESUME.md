@@ -139,7 +139,8 @@ per segment so the snap-up padding is cut at assembly. **Decided:** the Visual c
 the video model's — Wan is not told about the graphics, and `buildTimeline` carries each
 note through to `timeline/<section>.json`. **Still open:** what says a segment is full-frame
 vs PiP and which graphic shows — the sheet has prose Visual text on 11 of 109 rows.
-Remotion licensing: free ≤3 people, else $100/mo minimum.
+Remotion licensing is **settled: free** — the licence only charges above three people, and
+this is a one-person project.
 
 ## Environment notes
 
