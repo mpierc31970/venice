@@ -6,7 +6,7 @@
 import { Router } from "express";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { httpError, inside } from "../lib/store.js";
+import { httpError, inside, P, exists } from "../lib/store.js";
 import { saveBase64 } from "../lib/media.js";
 import { listJobs } from "../lib/jobs.js";
 import {
@@ -88,10 +88,12 @@ r.get("/", async (req, res, next) => {
       settings, run: await runWithJob(dir), balance, budget: cost,
       sheetUrl: state.sheetUrl, importedAt: state.importedAt, warnings: state.warnings || [],
       images: await imageStatus(dir, settings),
-      sections: list.map((s) => ({
+      sections: await Promise.all(list.map(async (s) => ({
         ...s,
+        timeline: (await exists(P.timeline(dir, s.id))) ? `timeline/${s.id}.json` : null,
+        video: (await exists(P.sectionVideo(dir, s.id))) ? `sections/${s.id}.mp4` : null,
         rows: s.rows.map((row) => ({ ...row, prompt: buildPrompt(settings, row), price: prices[row.duration] ?? null })),
-      })),
+      }))),
     });
   } catch (e) { next(e); }
 });

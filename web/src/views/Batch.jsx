@@ -104,6 +104,39 @@ export default function Batch({ id }) {
     });
   };
 
+  /** One section, priced on its own. The API scopes the run; the loop is otherwise identical. */
+  const askSection = (section) => {
+    const b = budget?.sections?.find((x) => x.id === section.id);
+    const pending = section.rows.filter((r) => r.status === "pending" && !r.sheetComplete);
+    const cost = b?.cost ?? 0;
+    if (!pending.length) return toast(`Section ${section.id} has nothing pending.`, "info");
+    setConfirm({
+      title: `Render section ${section.id}`,
+      cost,
+      facts: [
+        ["Renders", `${pending.length} segment${pending.length === 1 ? "" : "s"} — ${pending[0].id} to ${pending[pending.length - 1].id}, ${mmss(section.seconds)} of video`],
+        ["Cost", `${money(cost)} — ${money(balance)} now, about ${money(balance - cost)} left after`],
+        ["Order", "one clip at a time, in sheet order"],
+        ...(where ? [["Uploads to", `${where}clips/${section.id}/<segment>.mp4 — kept locally too`]] : [["Uploads", "no bucket configured — clips stay on this machine only"]]),
+        ...(settings.markCompleteInSheet ? [["Sheet", "each segment is ticked Complete as it lands"]] : []),
+        ["Then", `timeline/${section.id}.json is written, ready for Remotion`],
+        ["Stops when", `the balance falls below a clip's price plus the ${money(settings.creditFloor)} floor; ${settings.maxConsecutiveFailures} failures in a row; you press Stop`],
+      ],
+      warn: [
+        "This spends real money, and there is no undo — a clip is charged whether you keep it or not.",
+        // budget.sections[].fits describes the whole-run plan, where a section only
+        // misses out because earlier ones spent first. On its own it may fit fine, so
+        // this asks the question that is actually being answered: this section, now.
+        balance != null && balance < cost + settings.creditFloor
+          ? `The balance cannot finish this section on its own — ${money(cost)} plus the ${money(settings.creditFloor)} floor is more than ${money(balance)}. The run will stop before starting it.`
+          : null,
+        nothingWatchedYet ? "Nothing has been rendered yet, so no finished clip has been watched. One 27s segment first is the cheap way to check the framing and the ending." : null,
+      ].filter(Boolean),
+      confirmLabel: `Render section ${section.id} · ${money(cost)}`,
+      go: run("sec-" + section.id, () => api.post(`/api/projects/${id}/batch/run`, { sections: [section.id] }), `Rendering section ${section.id}.`),
+    });
+  };
+
   /** The same, for one segment. */
   const askRow = (row) => setConfirm({
     title: `Render segment ${row.id}`,
@@ -148,7 +181,7 @@ export default function Batch({ id }) {
 
       <SettingsCard id={id} settings={settings} onSave={run} />
 
-      <Sections id={id} sections={sections} budget={budget} busy={busy} ask={askRow} run={runInfo} now={now} />
+      <Sections id={id} sections={sections} budget={budget} busy={busy} ask={askRow} askSection={askSection} run={runInfo} now={now} act={run} />
     </div>
   );
 }
@@ -282,7 +315,7 @@ function RunBar({ run, busy, balance, floor, onRun, onDry, onStop, onClear }) {
           : run?.reason ? <span className="dim small">last run: {run.reason}</span> : null}
       </header>
       <div className="row">
-        <Button className="primary" busy={busy === "run"} disabled={live} onClick={onRun}>Run — section at a time</Button>
+        <Button className="primary" busy={busy === "run"} disabled={live} onClick={onRun} title="Every section the balance can finish, in sheet order">Run all sections</Button>
         <Button busy={busy === "dry"} disabled={live} onClick={onDry} title="Walks the whole run — quotes, budget checks, prompts — without rendering anything. Free.">Dry run ($0)</Button>
         <Button className="ghost" busy={busy === "stop"} disabled={!live} onClick={onStop} title="Finishes the segment in flight — a clip already paid for is not abandoned">Stop</Button>
         {hasResult ? <Button className="ghost" busy={busy === "clear"} onClick={onClear} title="Forgets this run's log and totals. Renders nothing and deletes no clip.">Clear</Button> : null}
@@ -443,7 +476,7 @@ function SettingsCard({ id, settings, onSave }) {
 
 /* ------------------------------------------------------------- sections ---- */
 
-function Sections({ id, sections, budget, busy, ask, run, now }) {
+function Sections({ id, sections, budget, busy, ask, askSection, run, now, act }) {
   const [open, setOpen] = useState({});
   const costOf = (sid) => budget?.sections?.find((b) => b.id === sid);
   if (!sections.length) return <div className="card"><Empty>Import the sheet to see the sections.</Empty></div>;
@@ -459,18 +492,52 @@ function Sections({ id, sections, budget, busy, ask, run, now }) {
               <span className="dim small">{s.rows[0]?.id}–{s.rows[s.rows.length - 1]?.id} · {s.rows.length} segments · {mmss(s.seconds)}</span>
               <span className="grow" />
               <span className="dim small">{done}/{s.rows.length} rendered</span>
-              {b?.cost ? <span className={`chip ${b.fits ? "" : "warn"}`}>{money(b.cost)}</span> : null}
               {s.complete ? <span className="chip ok">complete</span> : null}
               {s.failed ? <span className="chip warn">{s.failed} failed</span> : null}
+              {s.pending ? (
+                <Button className="sm" busy={busy === "sec-" + s.id} disabled={!!run?.running}
+                  onClick={(e) => { e.stopPropagation(); askSection(s); }}
+                  title={run?.running ? "A run is already going" : `Renders only section ${s.id}, one clip at a time`}>
+                  Batch render {s.id}{b?.cost ? ` · ${money(b.cost)}` : ""}
+                </Button>
+              ) : b?.cost ? <span className={`chip ${b.fits ? "" : "warn"}`}>{money(b.cost)}</span> : null}
             </header>
             {open[s.id] ? (
               <div className="stack" style={{ padding: "0 16px 14px" }}>
                 {s.rows.map((row) => <Row key={row.id} id={id} row={row} busy={busy} ask={ask} live={run?.current?.row === row.id ? run.current : null} now={now} />)}
+                <SectionFooter id={id} section={s} busy={busy} act={act} />
               </div>
             ) : null}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Appears only once every row in the section is rendered. Assembly is free and
+ * repeatable — it is deliberately not coupled to anything that costs money, so this can
+ * be re-run as often as the graphics need tuning.
+ */
+function SectionFooter({ id, section, busy, act }) {
+  const done = section.rows.filter((r) => ["rendered", "uploaded"].includes(r.status)).length;
+  if (!section.complete || !done) return null;
+  const key = "tl-" + section.id;
+  const write = act(key, () => api.post(`/api/projects/${id}/batch/section/${section.id}/timeline`, {}), `timeline/${section.id}.json written.`);
+
+  return (
+    <div className="row" style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 2 }}>
+      <span className="chip ok">all {done} rendered</span>
+      <Button className="sm" busy={busy === key} onClick={write}
+        title="Writes timeline/<section>.json — the trim points and clip order Remotion reads. Free, and safe to re-run.">
+        {section.timeline ? "Rewrite timeline" : "Build timeline"}
+      </Button>
+      {section.timeline ? <span className="dim small mono">{section.timeline}</span> : null}
+      <span className="grow" />
+      {section.video
+        ? <a className="btn sm" href={media(id, section.video)} target="_blank" rel="noreferrer">▶ Play section video</a>
+        : <span className="dim small">Section video is assembled in Remotion — stage 2</span>}
     </div>
   );
 }
