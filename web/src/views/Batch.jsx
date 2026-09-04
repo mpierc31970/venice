@@ -251,9 +251,10 @@ function SettingsCard({ id, settings, onSave }) {
       {advanced ? (
         <div className="stack">
           <div className="field">
-            <label>Prompt template <span className="dim small">— {"{script}"} {"{visual}"} {"{duration}"} {"{section}"}</span></label>
+            <label>Prompt template <span className="dim small">— {"{script}"} {"{duration}"} {"{section}"}</span></label>
             <textarea className="mono" rows={9} value={s.promptTemplate || ""} onChange={(e) => set("promptTemplate", e.target.value)} />
             <div className="hint">The closing instruction is what stops her starting a new sentence in the seconds after the script ends. Most clips have 1–4 of them.</div>
+            <div className="hint">The sheet's Visual notes are deliberately not sent to the video model — they describe a graphic for Remotion to lay over the clip in stage 2, and they reach it through timeline/&lt;section&gt;.json.</div>
           </div>
           <div className="field">
             <label>Negative prompt</label>
@@ -319,7 +320,7 @@ function Row({ id, row, busy, onRender }) {
         <span className="dim small" style={{ minWidth: 84 }}>{row.wantSeconds}s → {row.duration}</span>
         <span style={{ color: st.color, minWidth: 76, fontSize: 12.5 }}>{st.label}</span>
         <span className="dim small grow" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.scriptText}</span>
-        {row.visual ? <span className="chip">visual</span> : null}
+        {row.visual ? <span className="chip" title={`For stage 2, not sent to the video model — ${row.visual}`}>visual</span> : null}
         {row.quote ? <span className="dim small" title="what this row actually cost">{money(row.quote)}</span> : null}
         <Button className="ghost xs" onClick={() => setShow(!show)}>{show ? "hide" : "prompt"}</Button>
         <Button className="xs" busy={busy === "row-" + row.id} disabled={row.sheetComplete || row.status === "rendering"} onClick={render} title={row.sheetComplete ? "Marked Complete in the sheet" : "Renders this one segment now, and charges for it"}>Render this one{row.price != null ? ` · ${money(row.price)}` : ""}</Button>

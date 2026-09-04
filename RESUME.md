@@ -135,8 +135,10 @@ Live per-section cost, confirmed against `/video/quote`, matches the plan exactl
 
 Remotion project for stitching, generated graphics, PiP, and the timeline (Remotion Studio *is*
 the timeline — don't build one). `timeline/<section>.json` is the seam; it carries `trimAfter`
-per segment so the snap-up padding is cut at assembly. **Open question:** what says a segment is
-full-frame vs PiP and which graphic shows — the sheet has prose Visual text on 11 of 109 rows.
+per segment so the snap-up padding is cut at assembly. **Decided:** the Visual column is Remotion's, never
+the video model's — Wan is not told about the graphics, and `buildTimeline` carries each
+note through to `timeline/<section>.json`. **Still open:** what says a segment is full-frame
+vs PiP and which graphic shows — the sheet has prose Visual text on 11 of 109 rows.
 Remotion licensing: free ≤3 people, else $100/mo minimum.
 
 ## Environment notes

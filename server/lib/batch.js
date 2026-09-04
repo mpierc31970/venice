@@ -261,7 +261,11 @@ export async function sections(dir) {
 /* -------------------------------------------------------------- prompt ---- */
 
 /**
- * Compose one row's prompt. Placeholders: {script} {visual} {duration} {section}.
+ * Compose one row's prompt. Placeholders: {script} {duration} {section} — and {visual},
+ * which the default template deliberately does not use. A Visual note describes a graphic
+ * for Remotion to lay over the clip in stage 2, not something for her to say or the room
+ * to contain; it reaches stage 2 through buildTimeline. The substitution stays wired in
+ * case a template ever wants it.
  * Wan takes its speech from the prompt — there is no separate script field — which is
  * why the spoken line is quoted and explicitly labelled in the template.
  */
