@@ -138,14 +138,20 @@ the segments at their trim points, carries the transitions and the generated gra
 renders `sections/<section>.mp4`. Remotion Studio *is* the timeline — do not build one.
 Licensing is free: the licence only charges above three people, and this is one.
 
-**Premiere is a one-way escape hatch, not a partner.** `timeline/<section>.xml` (FCP7
-xmeml, `server/lib/premiere.js`) exists so the raw trimmed clips can be pulled into
-Premiere for a final polish if one is wanted. It is deliberately **not** kept in step with
-what Remotion produces, and there is no round-trip: an edit made in Premiere stays in
-Premiere. That is the whole reason the design is simple — nothing has to reconcile.
+**The handoff to Premiere is the finished flat file.** `sections/<section>.mp4` is dragged
+straight in — no XML involved, graphics baked in. Chosen over a layered handoff (clips on
+V1, graphics as alpha overlays on V2) with that trade understood: once it is a flat file
+the graphics cannot be moved or retimed in Premiere, and a change means re-rendering from
+Remotion. That is fine, because re-rendering from Remotion is free and repeatable.
 
-So do not build: an XML importer, a sync mechanism, or anything that reads a Premiere
-project back. If a Premiere edit ever needs to become the master, that is a new decision.
+So **do not build**: alpha-channel overlay renders, a second video track in the XML, an XML
+importer, or any sync between the two tools. Remotion is where graphics get changed.
+
+`timeline/<section>.xml` (FCP7 xmeml, `server/lib/premiere.js`) still exists, unchanged, as
+a separate escape hatch: it points at the **raw** trimmed clips, with no graphics and no
+PiP, for the case where a section wants cutting from scratch. It is deliberately not kept
+in step with what Remotion produces, and there is no round-trip — an edit made in Premiere
+stays in Premiere. That is the whole reason the design is simple: nothing has to reconcile.
 
 ```
 remotion/
