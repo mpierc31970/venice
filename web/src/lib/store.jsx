@@ -13,11 +13,17 @@ export function StudioProvider({ children }) {
   }, []);
   useEffect(() => { refreshBilling(); const t = setInterval(refreshBilling, 60_000); return () => clearInterval(t); }, [refreshBilling]);
 
+  // Dedupe concurrent loads: several ModelPickers can mount before the first
+  // /api/models?type= response lands, and each would fire its own request.
+  const inflight = useRef({});
   const loadModels = useCallback(async (type) => {
     if (models[type]) return models[type];
-    const list = await api.get(`/api/models?type=${type}`);
-    setModels((m) => ({ ...m, [type]: list }));
-    return list;
+    if (inflight.current[type]) return inflight.current[type];
+    const p = api.get(`/api/models?type=${type}`)
+      .then((list) => { setModels((m) => ({ ...m, [type]: list })); return list; })
+      .finally(() => { delete inflight.current[type]; });
+    inflight.current[type] = p;
+    return p;
   }, [models]);
   useEffect(() => { ["text", "image", "video", "tts"].forEach((t) => loadModels(t).catch(() => {})); }, []); // eslint-disable-line
 
@@ -52,9 +58,12 @@ export function ProjectProvider({ id, children }) {
   }, [id, toast]);
   useEffect(() => { reload(); }, [reload]);
 
-  // Poll jobs while any are active.
+  // Poll jobs while any are active. Depend on the boolean, not on state.jobs:
+  // every poll replaces the jobs array, which would tear down and re-create the
+  // interval on each tick instead of leaving one timer running.
+  const jobsActive = (state.jobs || []).some((j) => j.status === "PENDING" || j.status === "PROCESSING");
   useEffect(() => {
-    if (!state.jobs?.some((j) => j.status === "PENDING" || j.status === "PROCESSING")) return;
+    if (!jobsActive) return;
     const t = setInterval(async () => {
       try {
         const jobs = await api.get(`/api/projects/${id}/jobs`);
@@ -63,7 +72,7 @@ export function ProjectProvider({ id, children }) {
       } catch {}
     }, 6000);
     return () => clearInterval(t);
-  }, [state.jobs, id, reload]);
+  }, [jobsActive, id, reload]);
 
   const patchProject = useCallback(async (patch) => {
     const project = await api.patch(`/api/projects/${id}`, patch);
