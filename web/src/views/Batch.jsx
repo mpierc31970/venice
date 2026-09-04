@@ -424,7 +424,6 @@ function Row({ id, row, busy, ask }) {
         <span className="dim small" style={{ minWidth: 84 }}>{row.wantSeconds}s → {row.duration}</span>
         <span style={{ color: st.color, minWidth: 76, fontSize: 12.5 }}>{st.label}</span>
         <span className="dim small grow" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.scriptText}</span>
-        {row.visual ? <span className="chip" title={`For stage 2, not sent to the video model — ${row.visual}`}>visual</span> : null}
         {row.quote ? <span className="dim small" title="what this row actually cost">{money(row.quote)}</span> : null}
         <Button className="ghost xs" onClick={() => setShow(!show)}>{show ? "hide" : "prompt"}</Button>
         <Button className="xs" busy={busy === "row-" + row.id} disabled={row.sheetComplete || row.status === "rendering"} onClick={() => ask(row)} title={row.sheetComplete ? "Marked Complete in the sheet" : "Shows what it will cost and do, before it does it"}>Render this one{row.price != null ? ` · ${money(row.price)}` : ""}</Button>
