@@ -79,10 +79,14 @@ r.post("/:id/open-folder", async (req, res, next) => {
   try {
     const { dir } = await openProject(req.params.id);
     const sub = req.body?.sub ? path.join(dir, req.body.sub) : dir;
-    const target = (await exists(sub)) ? sub : dir;
+    // Folders like clips/ and sections/ only exist once something has been written to
+    // them. Opening the project root instead is a reasonable fallback, but silently
+    // landing somewhere else looks like the button is broken — so say which happened.
+    const found = await exists(sub);
+    const target = found ? sub : dir;
     const cmd = process.platform === "win32" ? ["explorer", [target]] : process.platform === "darwin" ? ["open", [target]] : ["xdg-open", [target]];
     spawn(cmd[0], cmd[1], { detached: true, stdio: "ignore" }).unref();
-    res.json({ ok: true, dir: target });
+    res.json({ ok: true, dir: target, requested: req.body?.sub || null, missing: !found && !!req.body?.sub });
   } catch (e) { next(e); }
 });
 

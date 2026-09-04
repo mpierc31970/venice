@@ -40,7 +40,13 @@ function Frame({ children, crumb, actions }) {
 function BatchPage() {
   const { id } = useParams();
   const { toast } = useStudio();
-  const open = (sub) => api.post(`/api/projects/${id}/open-folder`, { sub }).catch((e) => toast(e.message, "error"));
+  const WHY = {
+    clips: "it is created when the first clip renders",
+    sections: "it is created in stage 2, when sections are assembled",
+  };
+  const open = (sub) => api.post(`/api/projects/${id}/open-folder`, { sub })
+    .then((r) => { if (r.missing) toast(`No ${sub}/ folder yet — ${WHY[sub] || "nothing has written to it"}. Opened the project folder instead.`, "info", 7000); })
+    .catch((e) => toast(e.message, "error"));
   return (
     <Frame
       crumb={id}
