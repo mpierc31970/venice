@@ -131,10 +131,11 @@ export default function Batch({ id }) {
       <BudgetLine budget={budget} balance={balance} sections={sections} />
 
       <RunBar
-        id={id} run={runInfo} busy={busy} load={load}
+        run={runInfo} busy={busy} balance={balance} floor={settings.creditFloor}
         onRun={askRun}
         onDry={run("dry", () => api.post(`/api/projects/${id}/batch/run`, { dryRun: true }), "Dry run started — nothing will be rendered.")}
         onStop={run("stop", () => api.post(`/api/projects/${id}/batch/stop`, {}), "Stopping after the current segment.")}
+        onClear={run("clear", () => api.post(`/api/projects/${id}/batch/clear`, {}), "Cleared.")}
       />
 
       <References id={id} images={images} settings={settings} onUpload={run} />
@@ -263,8 +264,14 @@ function BudgetLine({ budget, balance, sections }) {
 
 /* ------------------------------------------------------------------ run ---- */
 
-function RunBar({ run, busy, onRun, onDry, onStop }) {
+function RunBar({ run, busy, balance, floor, onRun, onDry, onStop, onClear }) {
   const live = run?.running;
+  const spent = run?.spent ?? 0;
+  const hasResult = !live && (run?.log?.length || run?.reason);
+  // What the run may spend before the floor stops it — the number the running total is
+  // climbing towards, so "$70.50" reads as a fraction of something rather than alone.
+  const ceiling = balance == null ? null : Math.max(0, balance - (floor ?? 0));
+
   return (
     <div className="card">
       <header>
@@ -278,7 +285,18 @@ function RunBar({ run, busy, onRun, onDry, onStop }) {
         <Button className="primary" busy={busy === "run"} disabled={live} onClick={onRun}>Run — section at a time</Button>
         <Button busy={busy === "dry"} disabled={live} onClick={onDry} title="Walks the whole run — quotes, budget checks, prompts — without rendering anything. Free.">Dry run ($0)</Button>
         <Button className="ghost" busy={busy === "stop"} disabled={!live} onClick={onStop} title="Finishes the segment in flight — a clip already paid for is not abandoned">Stop</Button>
-        {live ? <span className="dim small">{run.rendered} rendered · {run.failed} failed · {money(run.spent)} spent this run</span> : null}
+        {hasResult ? <Button className="ghost" busy={busy === "clear"} onClick={onClear} title="Forgets this run's log and totals. Renders nothing and deletes no clip.">Clear</Button> : null}
+
+        <span className="grow" />
+
+        {run && (live || hasResult) ? (
+          <span className="readout" title={run.dryRun ? "Nothing was charged — this is what the same run would have cost" : "Charged so far this run"}>
+            <b className={run.dryRun ? "dry" : ""}>{money(spent)}</b>
+            <span className="dim">{run.dryRun ? "would spend" : "spent"}</span>
+            {ceiling != null ? <span className="dim">of {money(ceiling)} spendable</span> : null}
+            {!run.dryRun ? <span className="dim">· {run.rendered} rendered{run.failed ? ` · ${run.failed} failed` : ""}</span> : null}
+          </span>
+        ) : null}
       </div>
       {run?.log?.length ? (
         <div className="mono small" style={{ maxHeight: 160, overflow: "auto", background: "var(--bg-2)", borderRadius: 8, padding: 10 }}>

@@ -63,4 +63,5 @@ export function ImportButton({ label, accept, onFile, className = "sm" }) {
   );
 }
 
-export const money = (n) => (n == null ? "—" : `$${Number(n).toFixed(n < 0.1 ? 3 : 2)}`);
+/** Sub-cent prices keep three decimals; zero and ordinary amounts keep two. */
+export const money = (n) => (n == null ? "—" : `$${Number(n).toFixed(n > 0 && n < 0.1 ? 3 : 2)}`);

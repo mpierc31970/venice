@@ -408,6 +408,17 @@ async function spendable(run) {
   return run.dryRun ? balance - run.spent : balance;
 }
 
+/**
+ * Forget a finished run's log and totals, so a rehearsal's numbers cannot be mistaken
+ * later for a record of what was actually rendered. Refuses while a run is live.
+ */
+export function clearRun(dir) {
+  const r = runners.get(dir);
+  if (r?.running) throw new Error("A run is in progress — stop it before clearing");
+  runners.delete(dir);
+  return { running: false };
+}
+
 /** Ask a run to stop. It finishes the row in flight — a clip already paid for is not abandoned. */
 export function stop(dir, reason = "stopped by hand") {
   const r = runners.get(dir);

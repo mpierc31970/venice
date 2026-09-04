@@ -217,3 +217,8 @@ tr:last-child td { border-bottom: 0; }
 .prog .lbl { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .prog.ok .bar i { background: var(--ok); }
 .prog.bad .bar i { background: var(--danger); }
+
+/* Running total, right-aligned on the button line. */
+.readout { display: inline-flex; align-items: baseline; gap: 7px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.readout b { font-size: 15px; color: var(--ok); }
+.readout b.dry { color: var(--accent); }

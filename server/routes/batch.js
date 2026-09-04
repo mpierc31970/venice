@@ -12,7 +12,7 @@ import { listJobs } from "../lib/jobs.js";
 import {
   readSettings, writeSettings, readState, listRows, sections, importSheet,
   buildPrompt, forgetImages, quoteRow, sectionCost, isPending, balanceUsd,
-  start, stop, runState, writeTimeline, patchRow,
+  start, stop, runState, clearRun, writeTimeline, patchRow,
 } from "../lib/batch.js";
 
 const r = Router();
@@ -148,6 +148,11 @@ r.post("/run", async (req, res, next) => {
     if (!dryRun) await assertReady(dir);
     res.json(await start(dir, { dryRun, sections: only }));
   } catch (e) { next(e); }
+});
+
+// POST /clear -> forget a finished run's log and totals. Renders nothing, deletes no clip.
+r.post("/clear", async (req, res, next) => {
+  try { res.json(clearRun(req.proj.dir)); } catch (e) { next(httpError(409, e.message)); }
 });
 
 // POST /stop -> ask the run to stop; the row in flight is not abandoned
