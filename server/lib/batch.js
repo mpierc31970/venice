@@ -644,10 +644,20 @@ export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 
     label: section.label,
     fps, width, height,
     // The avatar's treatment is fixed, not per-segment: a circle in the lower right when
-    // a graphic has the frame, full screen otherwise. Never animated, never moved — a
-    // presenter who drifts around the frame between cuts reads as an error, and these
-    // segments are already 8 to 17 independent generations of one continuous take.
-    avatar: { pip: { shape: "circle", corner: "bottom-right", animated: false } },
+    // a graphic has the frame, full screen otherwise. There is no third layout.
+    //
+    // `motion: "none"` and `transition: "cut"` are the whole specification, and they are
+    // stated as data because the idiomatic Remotion component does the opposite: a spring
+    // scale as the circle appears is what anyone would reach for, and it is wrong here.
+    // The circle does not zoom in, scale up, fade, slide, drift or breathe. It is absent,
+    // and then on the next frame it is present, at the same size and the same place every
+    // time. A presenter who moves around the frame between cuts reads as an error —
+    // especially across 8 to 17 independent generations of what should be one take.
+    avatar: {
+      pip: { shape: "circle", corner: "bottom-right", size: 0.25 },
+      motion: "none",      // no zoom, no scale, no drift — ever
+      transition: "cut",   // appears and disappears on a single frame boundary
+    },
     segments: section.rows.filter((r) => RENDERED.has(r.status)).map((r) => ({
       id: r.id,
       clip: r.clip,

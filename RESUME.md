@@ -167,9 +167,12 @@ padding is cut at assembly rather than reaching the viewer.
 
 ### Fixed rules for Remotion (from the user, 2026-09-03)
 
-1. **PiP avatar: a circle in the lower right.** Never animated, never repositioned, same
-   size every time. A presenter who drifts around the frame between cuts reads as an
-   error, and a section is already 8–17 independent generations of one continuous take.
+1. **PiP avatar: a circle in the lower right.** Stated twice by the user, so treat it as
+   hard: **no animation of any kind.** No zoom, no scale-up, no spring, no fade, no slide,
+   no drift, no breathing. It is absent, and on the next frame it is present — the same
+   size in the same place, every time. The idiomatic Remotion component springs it in;
+   that is exactly what must not happen here. Carried as data on every timeline:
+   `avatar.motion: "none"`, `avatar.transition: "cut"`, and asserted in the tests.
 2. **Not PiP means full screen.** There is no third layout.
 3. **Subtitles on every segment**, verbatim from the Script column.
 

@@ -110,6 +110,11 @@ console.log("\ntimeline");
   eq(t.segments[1].visual, "chart", "the Visual note rides along for stage 2");
   eq(t.segments.map((s) => s.layout), ["full", "pip"], "a row with a Visual note goes pip; the rest stay full-frame");
   eq([t.fps, t.section], [FPS, "1.0"], "timeline carries fps and the section id");
+  // Stated as an assertion because the idiomatic Remotion component springs the circle
+  // in, and that is the one thing the user has ruled out twice.
+  eq(t.avatar.motion, "none", "the PiP circle is never animated — no zoom, no scale, no drift");
+  eq(t.avatar.transition, "cut", "it appears on a cut, not a transition");
+  eq([t.avatar.pip.shape, t.avatar.pip.corner], ["circle", "bottom-right"], "circle, lower right, every time");
 }
 
 /* -------------------------------------------------------------- quote ---- */
