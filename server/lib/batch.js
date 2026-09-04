@@ -647,7 +647,14 @@ export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 
         Math.round(parseInt(r.duration, 10) * fps),
         Math.round((r.wantSeconds + TRIM_SAFETY_S) * fps)
       ),
-      layout: "full",
+      // The sheet already chose: the 11 rows carrying a Visual note are the ones where a
+      // graphic belongs, and they are spread one or two per section. "pip" means the
+      // graphic takes the frame and the talking head shrinks into a corner — the notes
+      // describe comparisons, workflows and decision guides, which are unreadable the
+      // other way round at this resolution. Nothing is randomised: a head that shrinks
+      // mid-sentence for no reason reads as a glitch rather than an edit. Override by
+      // editing the value here — Remotion reloads instantly and it costs nothing.
+      layout: r.visual ? "pip" : "full",
       visual: r.visual || null,
     })),
   };

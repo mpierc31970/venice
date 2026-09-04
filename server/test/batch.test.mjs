@@ -108,6 +108,7 @@ console.log("\ntimeline");
   ok(t.segments[0].trimAfter < t.segments[0].clipFrames, "a 27s script in a 30s clip is trimmed");
   eq(t.segments[1].trimAfter, t.segments[1].clipFrames, "a 30s script in a 30s clip is not trimmed past its own end");
   eq(t.segments[1].visual, "chart", "the Visual note rides along for stage 2");
+  eq(t.segments.map((s) => s.layout), ["full", "pip"], "a row with a Visual note goes pip; the rest stay full-frame");
   eq([t.fps, t.section], [FPS, "1.0"], "timeline carries fps and the section id");
 }
 
