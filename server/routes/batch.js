@@ -36,6 +36,17 @@ async function budget(settings, list, balance) {
   return out;
 }
 
+/** One quote per distinct duration, not per row. Never fatal to a page load. */
+async function priceByDuration(settings, list) {
+  const out = {};
+  for (const row of list.flatMap((s) => s.rows)) {
+    if (out[row.duration] !== undefined) continue;
+    try { out[row.duration] = await quoteRow(settings, row); }
+    catch { out[row.duration] = null; }
+  }
+  return out;
+}
+
 // GET / -> settings + rows + sections + run status + budget
 r.get("/", async (req, res, next) => {
   try {
@@ -46,13 +57,16 @@ r.get("/", async (req, res, next) => {
     const balance = await balanceUsd();
     let cost = null;
     try { cost = await budget(settings, list, balance); } catch (e) { cost = { error: e.message, balance }; }
+    // Price per row, so a button that spends money says what it spends. Quotes are free
+    // and depend only on duration, so this is two calls for 109 rows, both cached.
+    const prices = await priceByDuration(settings, list);
     res.json({
       settings, run: runState(dir), balance, budget: cost,
       sheetUrl: state.sheetUrl, importedAt: state.importedAt, warnings: state.warnings || [],
       images: await imageStatus(dir, settings),
       sections: list.map((s) => ({
         ...s,
-        rows: s.rows.map((row) => ({ ...row, prompt: buildPrompt(settings, row) })),
+        rows: s.rows.map((row) => ({ ...row, prompt: buildPrompt(settings, row), price: prices[row.duration] ?? null })),
       })),
     });
   } catch (e) { next(e); }

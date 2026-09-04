@@ -34,6 +34,9 @@ code, .mono { font-family: var(--mono); font-size: 12.5px; }
 ::selection { background: var(--accent-dim); }
 button, input, select, textarea { font: inherit; color: inherit; }
 input, select, textarea { background: var(--bg-1); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 10px; width: 100%; outline: none; transition: border-color 0.15s; }
+/* A checkbox is not a text field. The shared rule above stretches one to the full
+   width of its row, which pushes its own label onto the next line. */
+input[type="checkbox"], input[type="radio"] { width: auto; flex: none; margin: 0; padding: 0; accent-color: var(--accent); }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 textarea { resize: vertical; min-height: 96px; line-height: 1.55; }
 textarea.mono { font-family: var(--mono); font-size: 12.5px; }

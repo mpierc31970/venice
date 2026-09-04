@@ -320,9 +320,9 @@ function Row({ id, row, busy, onRender }) {
         <span style={{ color: st.color, minWidth: 76, fontSize: 12.5 }}>{st.label}</span>
         <span className="dim small grow" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.scriptText}</span>
         {row.visual ? <span className="chip">visual</span> : null}
-        {row.quote ? <span className="dim small">{money(row.quote)}</span> : null}
+        {row.quote ? <span className="dim small" title="what this row actually cost">{money(row.quote)}</span> : null}
         <Button className="ghost xs" onClick={() => setShow(!show)}>{show ? "hide" : "prompt"}</Button>
-        <Button className="xs" busy={busy === "row-" + row.id} disabled={row.sheetComplete || row.status === "rendering"} onClick={render} title={row.sheetComplete ? "Marked Complete in the sheet" : "Render just this segment"}>Render this one</Button>
+        <Button className="xs" busy={busy === "row-" + row.id} disabled={row.sheetComplete || row.status === "rendering"} onClick={render} title={row.sheetComplete ? "Marked Complete in the sheet" : "Renders this one segment now, and charges for it"}>Render this one{row.price != null ? ` · ${money(row.price)}` : ""}</Button>
       </div>
       {row.error ? <div className="small" style={{ color: "var(--danger)" }}>{row.error}</div> : null}
       {show ? (
