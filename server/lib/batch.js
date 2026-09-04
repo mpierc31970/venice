@@ -27,6 +27,7 @@ import { videoQuote, getBalance } from "../venice.js";
 import { fetchSheet, parseCsv, rowsFromSheet, groupSections, parseLadder, sectionSeconds } from "./sheet.js";
 import { setCells, colLetter, quoteTab } from "./gsheets.js";
 import { slidesForSection, captionsFor } from "./slides.js";
+import { diagramFor } from "./diagrams.js";
 
 /* ------------------------------------------------------------ settings ---- */
 
@@ -665,6 +666,10 @@ export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 
       layout: r.visual ? "pip" : "full",
       visual: r.visual || null,
       slide: slides.get(r.id) || null,
+      // The diagram's structure and every word in it come from the script; only the
+      // title is human-written. Remotion renders it by `kind` — list, sequence,
+      // comparison, or plain points when the script has no detectable structure.
+      diagram: diagramFor(r),
       captions: captionsFor(r, fps),
     })),
   };
