@@ -652,16 +652,16 @@ export const TRIM_SAFETY_S = 0.4;
 export const FPS = 30;
 
 /**
- * Cross-dissolve at every join, deliberately faster than a normal one: a standard
- * dissolve is around a second, this is 6 frames — a fifth of that. Long enough to soften
- * the position jump between two independent generations of the same person, short enough
- * that it reads as a cut rather than as an effect.
+ * Straight cut at every join (user, 2026-09-04). This replaced a 6-frame cross-dissolve
+ * that had been argued for on the grounds it would soften the position jump between two
+ * independent generations of the same person; the answer was no dissolve, so there is
+ * none. `frames: 0` is not a disabled dissolve — it is the whole transition.
  *
- * It also lands where there is nothing to damage. `trimAfter` keeps ~12 frames of silence
- * after the last word (the snap-up padding, minus the trim), so a 6-frame overlap falls
- * inside that margin rather than blending one sentence into the next.
+ * Kept in the shape `{ kind, frames }` so the assembler has one thing to read and the
+ * arithmetic below stays the same: zero frames of overlap means the section is exactly
+ * the sum of its trimmed segments.
  */
-export const TRANSITION = { kind: "crossDissolve", frames: 6 };
+export const TRANSITION = { kind: "cut", frames: 0 };
 
 export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 } = {}) {
   // Emphasis slides are chosen across the whole section, so two never land back to back.
@@ -671,8 +671,9 @@ export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 
     Math.round(parseInt(r.duration, 10) * fps),
     Math.round((r.wantSeconds + TRIM_SAFETY_S) * fps)
   );
-  // Each dissolve overlaps two clips, so the section is shorter than the sum of its
-  // segments by one transition per join — n-1, not n.
+  // A transition that overlaps two clips shortens the section by one of itself per join —
+  // n-1, not n. Cuts overlap nothing, so this is zero and the section is the sum of its
+  // segments; the term stays because the arithmetic has to be right either way.
   const overlap = TRANSITION.frames * Math.max(0, rendered.length - 1);
   const durationInFrames = Math.max(0, rendered.reduce((n, r) => n + cut(r), 0) - overlap);
 
@@ -681,8 +682,7 @@ export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 
     label: section.label,
     fps, width, height,
     durationInFrames,
-    // Uniform across every join. The avatar itself still never animates — a dissolve
-    // between two shots is not motion applied to the presenter.
+    // Uniform across every join.
     transition: TRANSITION,
     // The avatar's treatment is fixed, not per-segment: a circle in the lower right when
     // a graphic has the frame, full screen otherwise. There is no third layout.

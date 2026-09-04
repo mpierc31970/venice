@@ -14,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
+import { ensureFocus } from "./focus.mjs";
 import { projectDir } from "./project-dir.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -50,6 +51,15 @@ if (!sections.length) {
 
 console.log(`project  ${dir}`);
 console.log(`sections ${sections.join(", ")}`);
+
+// Before bundling, because the bundle copies the public dir and focus/<s>.json has to be
+// in it. Only pip clips are measured, and only once — the file is the cache.
+for (const section of sections) {
+  const timeline = JSON.parse(
+    await fs.readFile(path.join(dir, "timeline", `${section}.json`), "utf8")
+  );
+  ensureFocus(dir, timeline, (line) => console.log(line));
+}
 
 let last = -1;
 const bar = (label) => (progress) => {

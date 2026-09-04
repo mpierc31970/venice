@@ -4,7 +4,7 @@ import { Captions } from "./Captions";
 import { Slide } from "./Slide";
 import { Diagram } from "./visuals/Diagram";
 import { CAPTION_BAND, PAD, theme } from "./theme";
-import type { Avatar, Segment as SegmentData } from "./timeline";
+import type { Avatar, Focus, Segment as SegmentData } from "./timeline";
 
 /**
  * Two layouts, and there is no third. "full" is the talking head at full frame; "pip"
@@ -12,10 +12,11 @@ import type { Avatar, Segment as SegmentData } from "./timeline";
  * chose which — 11 rows of 109 — so nothing is decided at render time and a head never
  * shrinks mid-section for a reason the viewer cannot see.
  */
-export const Segment: React.FC<{ segment: SegmentData; avatar: Avatar }> = ({
-  segment,
-  avatar,
-}) => {
+export const Segment: React.FC<{
+  segment: SegmentData;
+  avatar: Avatar;
+  focus?: Focus[string];
+}> = ({ segment, avatar, focus }) => {
   const { width } = useVideoConfig();
   const src = staticFile(segment.clip);
 
@@ -66,9 +67,31 @@ export const Segment: React.FC<{ segment: SegmentData; avatar: Avatar }> = ({
             boxShadow: "0 24px 70px rgba(0, 0, 0, 0.5)",
           }}
         >
+          {/*
+            Centred on the presenter, not on the frame. Wan generates every clip
+            independently and the framing drifts — in section 1.0 she is at x = 0.49 in
+            seven clips and x = 0.41 in the eighth — which is invisible full frame and
+            reads as a badly placed avatar once cropped to a circle. focus.mjs measures
+            where she actually is; this puts that point in the middle of the circle.
+
+            The video is laid out at full height and natural width, its left edge at the
+            circle's centre, then pulled back by `x` of its own width. A CSS percentage
+            translate resolves against the element itself, so this needs no knowledge of
+            the source's aspect ratio. The clamp keeps the frame covering the circle: a
+            16:9 clip is 1.78x as wide as the circle, so anything from 0.32 to 0.68 leaves
+            no gap, and every clip measured so far sits between 0.40 and 0.50.
+          */}
           <OffthreadVideo
             src={src}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: "50%",
+              height: "100%",
+              width: "auto",
+              maxWidth: "none",
+              transform: `translateX(${-100 * Math.min(0.68, Math.max(0.32, focus?.x ?? 0.5))}%)`,
+            }}
           />
         </div>
 

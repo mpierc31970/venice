@@ -44,7 +44,7 @@ export type Timeline = {
   width: number;
   height: number;
   durationInFrames: number;
-  transition: { kind: "crossDissolve"; frames: number };
+  transition: { kind: "cut" | "crossDissolve"; frames: number };
   avatar: Avatar;
   segments: Segment[];
 };
@@ -62,3 +62,9 @@ export const bySection = (a: string, b: string) => {
   }
   return 0;
 };
+
+/**
+ * focus/<section>.json — segment id -> where the presenter is in that clip, measured by
+ * focus.mjs. Only pip segments appear; a missing entry means centred.
+ */
+export type Focus = Record<string, { x: number; y: number }>;

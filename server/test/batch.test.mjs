@@ -110,17 +110,11 @@ console.log("\ntimeline");
   eq(t.segments[1].visual, "chart", "the Visual note rides along for stage 2");
   eq(t.segments.map((s) => s.layout), ["full", "pip"], "a row with a Visual note goes pip; the rest stay full-frame");
   eq([t.fps, t.section], [FPS, "1.0"], "timeline carries fps and the section id");
-  // Stated as an assertion because the idiomatic Remotion component springs the circle
-  // in, and that is the one thing the user has ruled out twice.
-  eq(t.transition, { kind: "crossDissolve", frames: 6 }, "every join is a 6-frame dissolve — a fifth of a normal one");
-  // Two rendered segments of 900 and 900 frames, cut at 900 and 822, one join.
-  eq(t.durationInFrames, 900 + 822 - 6, "the section is shorter than its segments by one dissolve per join");
-  {
-    // The dissolve must fall in the silence the trim margin leaves, not across speech.
-    const seg = t.segments[0];
-    const padding = seg.clipFrames - Math.round(30 * 27); // clip length minus scripted speech
-    ok(padding >= t.transition.frames, `the ${t.transition.frames}-frame dissolve fits inside the ${padding} frames of silence after the last word`);
-  }
+  // Stated as an assertion because a dissolve is what anyone assembling this would reach
+  // for, and the user ruled it out: every join is a straight cut.
+  eq(t.transition, { kind: "cut", frames: 0 }, "every join is a cut — no dissolve of any length");
+  // Two rendered segments of 900 and 900 frames, cut at 900 and 822. Nothing overlaps.
+  eq(t.durationInFrames, 900 + 822, "a cut overlaps nothing, so the section is the sum of its trimmed segments");
   eq(t.avatar.motion, "none", "the PiP circle is never animated — no zoom, no scale, no drift");
   eq(t.avatar.transition, "cut", "it appears on a cut, not a transition");
   eq([t.avatar.pip.shape, t.avatar.pip.corner], ["circle", "bottom-right"], "circle, lower right, every time");

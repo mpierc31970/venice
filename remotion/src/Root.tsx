@@ -1,7 +1,7 @@
 import React from "react";
 import { Composition, getStaticFiles, staticFile } from "remotion";
 import { Section } from "./Section";
-import { bySection, compositionId, type Timeline } from "./timeline";
+import { bySection, compositionId, type Focus, type Timeline } from "./timeline";
 
 /**
  * One composition per timeline on disk — no list to maintain. A section appears here the
@@ -25,15 +25,20 @@ export const RemotionRoot: React.FC = () => (
         fps={30}
         width={1920}
         height={1080}
-        defaultProps={{ src: `timeline/${section}.json`, timeline: null }}
+        defaultProps={{ src: `timeline/${section}.json`, timeline: null, focus: {} }}
         calculateMetadata={async ({ props }) => {
           const timeline: Timeline = await fetch(staticFile(props.src)).then((r) => r.json());
+          // Measured by focus.mjs, which render.mjs runs before it bundles. Absent is
+          // fine and means centred — it is only ever a correction to the crop.
+          const focus: Focus = await fetch(staticFile(`focus/${section}.json`))
+            .then((r) => (r.ok ? r.json() : {}))
+            .catch(() => ({}));
           return {
             durationInFrames: timeline.durationInFrames,
             fps: timeline.fps,
             width: timeline.width,
             height: timeline.height,
-            props: { ...props, timeline },
+            props: { ...props, timeline, focus },
           };
         }}
       />

@@ -159,6 +159,7 @@ React 19 and `web/` is on 18, so keeping its own `node_modules` avoids a hoist f
 remotion/
   project-dir.mjs         resolves the project dir (VENICE_PROJECT_DIR, else the registry)
   remotion.config.ts      publicDir = the project dir; Studio serves it directly
+  focus.mjs               measures where the presenter is -> focus/<s>.json
   render.mjs              timeline/<s>.json -> sections/<s>.mp4, bundling once for all
   src/Root.tsx            one <Composition> per timeline found on disk
   src/Section.tsx         <TransitionSeries> of segments, cut at trimAfter
@@ -177,13 +178,27 @@ The project directory **is** the public dir, so nothing is imported or kept in s
 1.0, ~1.4 GB once all 109 clips exist). That is one copy per invocation, not per section,
 which is why `render.mjs` bundles once and loops.
 
+`focus/<section>.json` is the second seam, and the only thing Remotion writes: segment id
+→ where the presenter actually is in that clip, as a fraction of the frame. It is measured
+from the clip itself — the centroid of what moves against a still background is, on a
+fixed camera, her — using the ffmpeg that ships inside Remotion's compositor package. No
+model, no face detection. Only pip segments are measured, results are cached, and a
+missing entry means centred, so nothing breaks if the file is deleted. `render.mjs` fills
+in anything missing before it bundles; `node remotion/focus.mjs` does it on its own if you
+want Studio to be right before rendering.
+
 Run it:
 
 ```
 npm run remotion             # Studio — the timeline, and where graphics get changed
 node remotion/render.mjs     # every section that has a timeline
 node remotion/render.mjs 1.0 # just that one
+node remotion/focus.mjs      # re-measure the PiP framing, without rendering
 ```
+
+`POST /api/projects/:id/batch/section/:id/timeline` rewrites a `timeline/<s>.json` in
+place — free and repeatable, and how a rule change like the one above reaches a section
+that has already finished.
 
 `timeline/<section>.json` is the seam and already exists — `writeTimeline` fires the moment
 every row in a section is rendered. It carries `trimAfter` per segment so the snap-up
@@ -199,13 +214,17 @@ padding is cut at assembly rather than reaching the viewer.
    `avatar.motion: "none"`, `avatar.transition: "cut"`, and asserted in the tests.
 2. **Not PiP means full screen.** There is no third layout.
 3. **Subtitles on every segment**, verbatim from the Script column.
-4. **Cross-dissolve at every join, 6 frames** — a fifth of a standard one-second dissolve.
-   Fast enough to read as a cut, long enough to soften the position jump between two
-   independent generations of the same person. It falls inside the silence `trimAfter`
-   leaves after the last word, so it never blends one sentence into the next. Note this
-   does **not** contradict rule 1: a dissolve between two shots is not motion applied to
-   the presenter. `timeline.transition`, and `durationInFrames` already accounts for the
-   n-1 overlaps.
+4. **Straight cut at every join. No dissolve** (user, 2026-09-04). This replaced a 6-frame
+   cross-dissolve that had been argued for as a way to soften the position jump between
+   two independent generations of the same person. The answer was no dissolve, so there
+   is none — `timeline.transition` is `{ kind: "cut", frames: 0 }`, `durationInFrames` is
+   the plain sum of the trimmed segments, and both are asserted in the tests. Do not
+   reintroduce one as a "fix" for a jumpy join; the jump is a content problem.
+5. **The PiP avatar is centred on the presenter, not on the frame** (user, 2026-09-04).
+   Wan frames each clip independently and it drifts: across section 1.0 she sits at
+   x = 0.49 in seven clips and **x = 0.41 in 1.4**, which is invisible full frame and
+   reads as a badly placed avatar once cropped to a circle a quarter of the screen wide.
+   The circle's own position — lower right, fixed size — was right and did not change.
 
 ### What is on screen, and where it comes from
 
@@ -233,12 +252,12 @@ would put a regulatory claim on screen that the script's author chose not to mak
 ("Chapter 83 bleach-solution categories by purpose"); nothing says the categories, layout
 or styling, and inventing them is exactly the risk above. Wan is never told about any of it.
 
-**Section 1.0 is rendered and stitched** — `sections/1.0.mp4`, 1920x1080, 7122 frames /
-237.4s, h264 + aac, 143 MB, from the 8 clips at `clips/1.0/`. The arithmetic is asserted
-before every render rather than eyeballed: composition length, `timeline.durationInFrames`
-and (sum of `trimAfter`) − 6 × joins must all agree, and `render.mjs` refuses the render if
-they do not. 8 × 30.02s of raw clip comes out as 237.4s, so the trims and the seven
-overlaps are both really happening.
+**Section 1.0 is rendered and stitched** — `sections/1.0.mp4`, 1920x1080, 7164 frames /
+238.8s, h264 + aac, from the 8 clips at `clips/1.0/`. The arithmetic is asserted before
+every render rather than eyeballed: composition length, `timeline.durationInFrames` and
+(sum of `trimAfter`) − `transition.frames` × joins must all agree, and `render.mjs`
+refuses the render if they do not. 8 × 30.02s of raw clip comes out as 238.8s, so the
+trims are really happening.
 
 Watched: the full-frame layout and the PiP layout both read correctly, and the circle cuts
 in with no motion. **Not yet watched end to end by a human** — that is the next thing, and
