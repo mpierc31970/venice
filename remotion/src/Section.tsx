@@ -4,9 +4,9 @@ import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { Segment } from "./Segment";
 import { theme } from "./theme";
-import type { Focus, Timeline } from "./timeline";
+import type { Focus, Plates, Timeline } from "./timeline";
 
-export type SectionProps = { src: string; timeline: Timeline | null; focus: Focus };
+export type SectionProps = { src: string; timeline: Timeline | null; focus: Focus; plates: Plates | null };
 
 /**
  * A section is one continuous piece of narration that Wan could only make 30 seconds at
@@ -21,7 +21,7 @@ export type SectionProps = { src: string; timeline: Timeline | null; focus: Focu
  * The arithmetic matches buildTimeline(): n segments overlap at n-1 joins, so the series
  * is shorter than the sum of its parts by exactly transition.frames per join — zero.
  */
-export const Section: React.FC<SectionProps> = ({ timeline, focus }) => {
+export const Section: React.FC<SectionProps> = ({ timeline, focus, plates }) => {
   if (!timeline) return null;
   const { segments, transition, avatar } = timeline;
 
@@ -37,7 +37,13 @@ export const Section: React.FC<SectionProps> = ({ timeline, focus }) => {
               />
             ) : null}
             <TransitionSeries.Sequence durationInFrames={segment.trimAfter}>
-              <Segment segment={segment} avatar={avatar} focus={focus[segment.id]} />
+              <Segment
+                segment={segment}
+                avatar={avatar}
+                focus={focus[segment.id]}
+                plate={plates?.segments?.[segment.id] ?? null}
+                target={plates?.target ?? null}
+              />
             </TransitionSeries.Sequence>
           </React.Fragment>
         ))}

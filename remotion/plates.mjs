@@ -221,7 +221,7 @@ export function readPlates(dir, section) {
  * recomputed from the cached tracks — which is arithmetic, not video, and instant.
  */
 export async function ensurePlates(dir, timeline, log = () => {}) {
-  const have = readPlates(dir, timeline.section);
+  const have = readPlates(dir, timeline.section).segments || {};
   const segments = timeline.segments;
 
   for (const segment of segments) {
@@ -254,10 +254,12 @@ export async function ensurePlates(dir, timeline, log = () => {}) {
     const entry = have[segment.id];
     entry.transforms = transformsFor(entry.track, target, { width: entry.width, height: entry.height });
   }
-  have._target = { ...target, at: new Date().toISOString() };
-
+  // `target` sits beside `segments` rather than among them: it is a property of the whole
+  // section, and Remotion needs it to place her, so it must not be mistakable for a
+  // segment id.
+  const out = { section: timeline.section, at: new Date().toISOString(), target, segments: have };
   fs.mkdirSync(path.dirname(platesFile(dir, timeline.section)), { recursive: true });
-  fs.writeFileSync(platesFile(dir, timeline.section), JSON.stringify(have, null, 2) + "\n");
+  fs.writeFileSync(platesFile(dir, timeline.section), JSON.stringify(out, null, 2) + "\n");
   log(`target framing: width ${target.w.toFixed(0)}px, centre x ${target.cx.toFixed(0)}px, head top ${target.top.toFixed(0)}px`);
-  return have;
+  return out;
 }

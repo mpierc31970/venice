@@ -29,6 +29,37 @@ export type Segment = {
   captions: Caption[];
 };
 
+/**
+ * plates/<section>.json, written by plates.mjs before the bundle.
+ *
+ * Present only for sections rendered against a green screen. A section whose clips still
+ * carry their own room has no plates file, and Segment falls back to playing the clip
+ * whole — which is what every clip did before the key existed.
+ */
+export type PlateTransform = {
+  /** Scale about the source's top-left corner. */
+  s: number;
+  /** Translation after scaling, as a fraction of the source frame. */
+  dx: number;
+  dy: number;
+};
+
+export type Plate = {
+  /** Relative to the project dir, e.g. "plates/1.0/lesson1-section1.0-segment1.1.plate.webm". */
+  plate: string;
+  /** The plate's own pixels — 624x624 for a 1:1 clip, not the composition's size. */
+  width: number;
+  height: number;
+  /** One per frame of the clip. */
+  transforms: PlateTransform[];
+};
+
+export type Plates = {
+  /** Where the section agreed she should be, in source pixels. */
+  target: { w: number; cx: number; top: number };
+  segments: Record<string, Plate>;
+};
+
 export type Avatar = {
   pip: { shape: "circle"; corner: "bottom-right"; size: number };
   /** Always "none". The circle does not zoom, scale, fade, slide, drift or breathe. */

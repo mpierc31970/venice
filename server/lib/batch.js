@@ -51,8 +51,18 @@ import { diagramFor } from "./diagrams.js";
 // The camera and background lines are absolute for the same reason. A clip that pushes
 // in even slightly ends on a different shot size than it began, so its last frame no
 // longer matches the next clip's first.
+//
+// The background is now a green screen, and that is a retreat from arguing with the model
+// rather than a new argument. Three commits tried to hold the room still by description
+// and it still drifted and zoomed; the room is now composited in afterwards, where it
+// cannot move at all. What is left here is the half the prompt was always good at — her,
+// and how she is framed — plus the two lines that make her keyable: a flat, even screen,
+// and front lighting with no green spilling onto her.
+//
+// The framing paragraph is unchanged on purpose. It is the part that was working, and the
+// aspect moving to 1:1 does not change where her chin or her shoulders should sit.
 export const PROMPT_TEMPLATE = `Static talking-head shot, locked-off camera on a tripod at eye level. One
-woman, alone in the room.
+woman, alone in front of a green screen.
 
 Framing, the same in every frame: the woman from @image1, facing the camera and
 looking into the lens, centered left to right, framed from mid-chest up. A
@@ -60,10 +70,15 @@ small, even gap above the top of her head. Her chin sits near the middle of the
 frame and her shoulders fill the lower corners. She stays this size and in this
 place from the first frame to the last.
 
-Background: the room from @image2 exactly as given, filling the frame edge to
-edge at its own scale and its own framing. Do not crop it, zoom into it,
-re-frame it, relight it, redecorate it or replace it. Nothing in the background
-moves.
+Background: the plain chroma-key green screen from @image2, filling the frame
+edge to edge. One flat, even, uniform shade of green. No objects, no furniture,
+no texture, no pattern, no seams, no shadows cast on it, no gradient, no
+vignette, no change in brightness across the frame. Nothing in the background
+moves and the green never changes shade.
+
+She is lit from the front, soft and even, as if standing in a bright daylit
+room. No green light falls on her skin, her hair or her clothing, and there is
+no green rim or halo around her edges.
 
 The camera never moves: no zoom in, no zoom out, no push in, no pull back, no
 dolly, no track, no crane, no pan, no tilt, no roll, no handheld drift, no
@@ -89,15 +104,32 @@ export const NEGATIVE_PROMPT =
   "camera movement, camera shake, handheld, zoom in, zoom out, push in, pull back, " +
   "dolly, tracking shot, crane, pan, tilt, reframing, changing shot size, jump cut, " +
   "scene change, changing background, cropped background, letterbox, black bars, " +
-  "text overlay";
+  "text overlay, " +
+  // The key is only as good as the screen behind her and the light on her. Everything
+  // below is something that survives chromakey as a visible fault: a shade that shifts
+  // across the frame leaves the corners keyed and her middle not, and green bounced onto
+  // her hair leaves a halo that despill cannot fully take back.
+  "green light on skin, green tint, green rim light, green spill, green halo, " +
+  "shadow on the background, gradient background, textured background, " +
+  "patterned background, objects in the background, uneven lighting on the background, " +
+  "dark corners, vignette";
 
 export const DEFAULTS = {
   sheetUrl: process.env.SHEET_URL || "",
   model: "wan-3-0-reference-to-video",
-  aspect: "16:9",
+  // Square, because Venice bills total pixels and not shape: 1:1 at 480p comes back as
+  // 624x624, which is within ten thousand pixels of 832x480 and costs the identical
+  // $1.36. Widescreen spends nearly a third of that budget on room either side of her —
+  // room that is now keyed out and thrown away. The square spends it on her instead, and
+  // she arrives 624 lines tall rather than 480.
+  aspect: "1:1",
   resolution: "480p",
   audio: true,
   avatar: "avatar.png",
+  // Two images that used to be one. `screen` is what Wan is given as @image2 and is now a
+  // flat green field; `background` is the room, which Wan never sees at all — Remotion
+  // composites it behind the keyed plate, where it cannot drift, zoom or be reinvented.
+  screen: "green-screen.png",
   background: "background.png",
   promptTemplate: PROMPT_TEMPLATE,
   negativePrompt: NEGATIVE_PROMPT,
@@ -333,11 +365,13 @@ export function buildPrompt(settings, row) {
 const imageCache = new Map(); // dir -> { key, urls }
 export async function buildImageRefs(dir, settings) {
   const avatar = path.join(dir, settings.avatar);
-  const background = path.join(dir, settings.background);
-  const key = avatar + "|" + background;
+  // @image2 is the green screen, not the room. The room is composited afterwards and is
+  // never shown to the model — which is the whole point of the change.
+  const screen = path.join(dir, settings.screen);
+  const key = avatar + "|" + screen;
   const hit = imageCache.get(dir);
   if (hit && hit.key === key) return hit.urls;
-  const urls = [await toDataUrl(avatar), await toDataUrl(background)];
+  const urls = [await toDataUrl(avatar), await toDataUrl(screen)];
   imageCache.set(dir, { key, urls });
   return urls;
 }

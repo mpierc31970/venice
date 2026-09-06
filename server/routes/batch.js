@@ -19,7 +19,10 @@ import { assemble, assembleState } from "../lib/assemble.js";
 
 const r = Router();
 
-const SLOTS = { avatar: "avatar", background: "background" };
+// `screen` is what Wan is given as @image2 — a flat green field. `background` is the room
+// Remotion composites behind the keyed plate, which Wan never sees. Both are uploadable
+// because both are things you might want to change without touching code.
+const SLOTS = { avatar: "avatar", screen: "screen", background: "background" };
 
 /**
  * How far the current balance reaches, section by section — the number that makes the

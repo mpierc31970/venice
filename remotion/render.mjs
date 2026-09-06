@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { bundle } from "@remotion/bundler";
 import { getVideoMetadata, renderMedia, selectComposition } from "@remotion/renderer";
 import { ensureFocus } from "./focus.mjs";
+import { ensurePlates, screenColour } from "./plates.mjs";
 import { preflight } from "./preflight.mjs";
 // One source of truth for what media files are called, shared with the server. store.js
 // imports nothing but node builtins, so reaching across the workspace costs nothing.
@@ -75,7 +76,34 @@ for (const section of sections) {
     process.exit(1);
   }
 
-  ensureFocus(dir, timeline, (line) => console.log(line));
+  // Key the green screen and measure her, before the bundle — plates/<section>.json has
+  // to be inside the public dir for Remotion to fetch it, exactly like focus/.
+  // A section whose clips carry their own room is left alone: nothing to key.
+  if (await isGreen(timeline)) {
+    await ensurePlates(dir, timeline, (line) => console.log(line));
+  } else {
+    ensureFocus(dir, timeline, (line) => console.log(line));
+  }
+}
+
+/**
+ * Was this section shot against a screen, or in the room?
+ *
+ * Decided from the footage rather than a setting, because settings change and old clips
+ * do not: a section rendered before the green screen must keep rendering the way it always
+ * did, however the project is configured today. A frame that is overwhelmingly one
+ * saturated colour at its edges is a screen; a spa room is not.
+ */
+async function isGreen(timeline) {
+  const first = timeline.segments[0];
+  if (!first) return false;
+  const screen = await screenColour(path.join(dir, first.clip));
+  const hex = screen.replace(/^0x/i, "");
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  if ([r, g, b].some(Number.isNaN)) return false;
+  const green = g > r + 30 && g > b + 30;
+  console.log(`screen ${screen} -> rgb(${r},${g},${b}) — ${green ? "green screen, keying" : "a room, playing the clips whole"}`);
+  return green;
 }
 
 let last = -1;
