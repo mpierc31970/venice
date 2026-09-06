@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Img, OffthreadVideo, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Img, OffthreadVideo, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { Captions } from "./Captions";
 import { Slide } from "./Slide";
 import { Diagram } from "./visuals/Diagram";
@@ -51,6 +51,16 @@ export const Segment: React.FC<{
   const frame = useCurrentFrame();
   const src = staticFile(segment.clip);
   const keyed = Boolean(plate && target);
+
+  /**
+   * Her voice.
+   *
+   * The plate is written with `-an` (plates.mjs) because it is a visual asset, so the
+   * keyed paths below render a silent video and the audio has to be played from the
+   * original clip alongside it. The unkeyed path needs nothing: its OffthreadVideo is
+   * the clip itself and carries its own sound.
+   */
+  const voice = keyed ? <Audio src={src} /> : null;
 
   if (segment.layout === "pip" && segment.diagram) {
     // A quarter of the frame's width. Fixed: the same size in the same place in every
@@ -160,6 +170,7 @@ export const Segment: React.FC<{
         </div>
 
         <Captions captions={segment.captions} right={size + PAD * 2} />
+        {voice}
       </AbsoluteFill>
     );
   }
@@ -179,6 +190,7 @@ export const Segment: React.FC<{
       )}
       {segment.slide ? <Slide text={segment.slide} /> : null}
       <Captions captions={segment.captions} />
+      {voice}
     </AbsoluteFill>
   );
 };
