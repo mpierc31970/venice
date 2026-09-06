@@ -376,7 +376,17 @@ function RunBar({ run, busy, balance, floor, onRun, onDry, onStop, onClear }) {
 
 /* ----------------------------------------------------------- references ---- */
 
-/** The two images every clip depends on, so they sit at the top and read filled or empty at a glance. */
+/**
+ * The three images a clip depends on, so they sit at the top and read filled or empty at a
+ * glance. Only the first two reach Wan — the room is composited afterwards by Remotion and
+ * the model never sees it, which is the whole point of keying her off green.
+ */
+const REF_SLOTS = [
+  ["avatar", "@image1 — sent to Wan"],
+  ["screen", "@image2 — sent to Wan"],
+  ["background", "composited by Remotion — Wan never sees it"],
+];
+
 function References({ id, images, settings, onUpload }) {
   const upload = (slot) => async (file) => {
     const data = await fileToBase64(file);
@@ -384,15 +394,16 @@ function References({ id, images, settings, onUpload }) {
   };
   return (
     <div className="card">
-      <header><h2>References</h2><span className="dim small">Both go into every clip whole — @image1 is the avatar, @image2 the background</span></header>
-      <div className="grid2">
-        {["avatar", "background"].map((slot) => {
+      <header><h2>References</h2><span className="dim small">@image1 is the avatar, @image2 the green screen — the room is composited afterwards</span></header>
+      <div className="grid3">
+        {REF_SLOTS.map(([slot, role]) => {
           const img = images?.[slot];
           return (
             <div key={slot} className="stack">
               {img
                 ? <Thumb wide src={`${media(id, settings[slot])}?t=${encodeURIComponent(img.at)}`} caption={`${slot} · ${settings[slot]} · ${(img.bytes / 1024).toFixed(0)} KB`} />
                 : <Empty wide>No {slot} yet</Empty>}
+              <span className="dim small">{role}</span>
               <ImportButton
                 label={img ? `Replace ${slot}` : `Upload ${slot}`}
                 accept="image/*"
