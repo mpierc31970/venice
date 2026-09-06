@@ -51,6 +51,30 @@ export function inside(dir, rel) {
   return abs;
 }
 
+/* ------------------------------------------------------------- naming ---- */
+
+/**
+ * The lesson a section or segment belongs to: the part before the first dot. Section
+ * "1.0" and segment "1.4" are both lesson 1; a second lesson would be 2.x throughout.
+ */
+export const lessonOf = (id) => String(id).split(".")[0];
+
+/**
+ * Media files say what they are, in full, in their own name.
+ *
+ * The folder already implies the section, so this is redundant on disk and deliberately
+ * so: these are the files that leave. A clip dragged onto a Premiere timeline, a plate
+ * attached to a message, a section video sitting in a downloads folder — each is alone,
+ * with only its filename to say what it is. And "1.1.mp4" is worse than uninformative
+ * here, because section ids and segment ids collide: segment 1.1 lives in section 1.0,
+ * while section 1.1 holds segments 1.9 to 1.23. Spelling out all three settles it.
+ *
+ * Sidecars — timeline/, focus/, plates/<section>.json — keep the bare section id. They
+ * never leave, and render.mjs discovers sections by reading those filenames back.
+ */
+export const segmentName = (section, id) => `lesson${lessonOf(section)}-section${section}-segment${id}`;
+export const sectionName = (section) => `lesson${lessonOf(section)}-section${section}`;
+
 export const P = {
   project: (d) => path.join(d, "project.json"),
   bible: (d) => path.join(d, "bible.md"),
@@ -69,7 +93,8 @@ export const P = {
   // Talking-head batch renderer
   batch: (d) => path.join(d, "batch.json"),
   rows: (d) => path.join(d, "rows.json"),
-  clip: (d, section, id) => path.join(d, "clips", section, id + ".mp4"),
+  clip: (d, section, id) => path.join(d, "clips", section, segmentName(section, id) + ".mp4"),
+  plate: (d, section, id) => path.join(d, "plates", section, segmentName(section, id) + ".plate.webm"),
   timeline: (d, section) => path.join(d, "timeline", section + ".json"),
-  sectionVideo: (d, section) => path.join(d, "sections", section + ".mp4"),
+  sectionVideo: (d, section) => path.join(d, "sections", sectionName(section) + ".mp4"),
 };

@@ -16,6 +16,9 @@ import { bundle } from "@remotion/bundler";
 import { getVideoMetadata, renderMedia, selectComposition } from "@remotion/renderer";
 import { ensureFocus } from "./focus.mjs";
 import { preflight } from "./preflight.mjs";
+// One source of truth for what media files are called, shared with the server. store.js
+// imports nothing but node builtins, so reaching across the workspace costs nothing.
+import { sectionName } from "../server/lib/store.js";
 import { projectDir } from "./project-dir.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -111,7 +114,7 @@ for (const section of sections) {
     );
   }
 
-  const out = path.join(dir, "sections", `${section}.mp4`);
+  const out = path.join(dir, "sections", `${sectionName(section)}.mp4`);
   await fs.mkdir(path.dirname(out), { recursive: true });
 
   last = -1;

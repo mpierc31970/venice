@@ -6,7 +6,7 @@
 import { Router } from "express";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { httpError, inside, P, exists } from "../lib/store.js";
+import { httpError, inside, P, exists, sectionName } from "../lib/store.js";
 import { saveBase64 } from "../lib/media.js";
 import { listJobs, ensurePoller } from "../lib/jobs.js";
 import { buildFcpXml, pixelsFor } from "../lib/premiere.js";
@@ -99,7 +99,7 @@ r.get("/", async (req, res, next) => {
       sections: await Promise.all(list.map(async (s) => ({
         ...s,
         timeline: (await exists(P.timeline(dir, s.id))) ? `timeline/${s.id}.json` : null,
-        video: (await exists(P.sectionVideo(dir, s.id))) ? `sections/${s.id}.mp4` : null,
+        video: (await exists(P.sectionVideo(dir, s.id))) ? `sections/${sectionName(s.id)}.mp4` : null,
         rows: s.rows.map((row) => ({ ...row, prompt: buildPrompt(settings, row), price: prices[row.duration] ?? null })),
       }))),
     });

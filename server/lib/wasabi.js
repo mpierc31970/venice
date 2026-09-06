@@ -13,6 +13,7 @@
 // Which is why a 403 is never retried: it is a configuration answer, not a transient
 // one, and retrying it 109 times just takes longer to tell you the same thing.
 import fs from "node:fs/promises";
+import { segmentName, sectionName } from "./store.js";
 import {
   S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand, HeadBucketCommand,
 } from "@aws-sdk/client-s3";
@@ -91,8 +92,9 @@ export async function ready(cfg) {
 }
 
 const key = (prefix, rest) => (prefix ? `${prefix}/${rest}` : rest);
-export const clipKey = (prefix, section, id) => key(prefix, `clips/${section}/${id}.mp4`);
-export const sectionKey = (prefix, id) => key(prefix, `sections/${id}.mp4`);
+export const clipKey = (prefix, section, id) =>
+  key(prefix, `clips/${section}/${segmentName(section, id)}.mp4`);
+export const sectionKey = (prefix, id) => key(prefix, `sections/${sectionName(id)}.mp4`);
 
 /** A 403 is a configuration answer. Retrying it is pointless, so it is marked fatal. */
 function wrap(e, where) {
