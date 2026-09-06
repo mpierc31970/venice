@@ -34,12 +34,19 @@ export default function Batch({ id }) {
   }, [id, toast]);
   useEffect(() => { load(); }, [load]);
 
-  // Poll only while a run is live. Depend on the boolean, not on `data`: every poll
-  // replaces the object, which would tear down and rebuild the timer on each tick.
+  // Poll fast while a run is live, slowly the rest of the time. Depend on the boolean,
+  // not on `data`: every poll replaces the object, which would tear down and rebuild the
+  // timer on each tick.
+  //
+  // The idle poll is not decoration. The moment a run stops existing is exactly the moment
+  // this page stopped asking about it — and a run can stop existing without anyone pressing
+  // Stop, because it lives in memory and `node --watch` restarts the server on any edit.
+  // A page that polled only while running sat for ever on its last snapshot, still showing
+  // a row as "rendered" long after the server had recorded it as failed. Now the worst it
+  // can be is 30s out of date.
   const running = !!data?.run?.running;
   useEffect(() => {
-    if (!running) return;
-    const t = setInterval(load, 6000);
+    const t = setInterval(load, running ? 6000 : 30000);
     return () => clearInterval(t);
   }, [running, load]);
 

@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "dev": "concurrently -n server,web -c blue,magenta \"npm run dev -w server\" \"npm run dev -w web\"",
+    "dev:batch": "concurrently -n server,web -c blue,magenta \"npm run start -w server\" \"npm run dev -w web\"",
     "build": "npm run build -w web",
     "start": "npm run start -w server",
     "test": "node --env-file=.env test-chat.js",
@@ -16,6 +17,7 @@
     "test:sheet": "node server/test/sheet.test.mjs",
     "test:batch": "node server/test/batch.test.mjs",
     "test:orphan": "node server/test/orphan.test.mjs",
+    "test:finish": "node server/test/finish.test.mjs",
     "test:diagrams": "node server/test/diagrams.test.mjs",
     "test:slides": "node server/test/slides.test.mjs",
     "test:premiere": "node server/test/premiere.test.mjs",

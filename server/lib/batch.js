@@ -19,7 +19,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { readJson, writeJson, P } from "./store.js";
+import { readJson, writeJson, exists, P } from "./store.js";
 import { enqueue, onJobDone } from "./jobs.js";
 import { toDataUrl, stamp } from "./media.js";
 import { model as getModel } from "./modelcache.js";
@@ -423,6 +423,14 @@ onJobDone(async (dir, job) => {
       r.at = new Date().toISOString();
     });
     console.log(`[batch] recovered orphaned job ${job.id} for row ${rowId} (${job.status})`);
+    // Recording the render is only half of it. The clip still has to reach Wasabi and the
+    // sheet still has to be ticked, and with the run gone this hook is the only thing left
+    // that can do either.
+    if (job.status === "COMPLETED") {
+      await finishRow(dir, rowId, {
+        onSheetError: (e) => console.error(`[batch] sheet write-back failed for ${rowId}: ${e.message}`),
+      });
+    }
   } catch (e) { console.error("[batch] orphan recovery", e.message); }
 });
 
@@ -581,6 +589,15 @@ async function loop(dir, run, only, onlyRows) {
   const todo = all.filter((s) => (!only || only.includes(s.id)) && pick(s).length);
 
   log(run, `${run.dryRun ? "dry run" : "run"} ${run.runId}: ${todo.length} section(s), ${todo.reduce((n, s) => n + pick(s).length, 0)} pending row(s)`);
+
+  // Before anything new is paid for, finish what an earlier stop left half-done. This is
+  // free — those clips are already bought and on disk — and it is deliberately not part
+  // of a dry run, which must not touch the sheet.
+  if (!run.dryRun) {
+    const finished = await finishStranded(dir, { onSheetError: (e) => log(run, `sheet write-back failed: ${e.message}`) });
+    if (finished.length) log(run, `finished ${finished.length} row(s) left over from an earlier stop: ${finished.map((r) => r.id).join(", ")}`);
+  }
+
   if (!todo.length) { run.reason = "nothing pending"; return; }
 
   // Fail before spending anything if the references are missing.
@@ -691,10 +708,77 @@ async function renderRow(dir, settings, run, row, request, quote) {
   run.rendered += 1;
   await patchRow(dir, row.id, (r) => { r.status = "rendered"; r.clip = done.outFile; r.at = new Date().toISOString(); });
 
-  const key = await uploadClip(dir, settings, row, path.join(dir, done.outFile));
-  if (key) await patchRow(dir, row.id, (r) => { r.status = "uploaded"; r.wasabiKey = key; });
+  await finishRow(dir, row.id, { onSheetError: (e) => log(run, `sheet write-back failed for ${row.id}: ${e.message}`) });
+}
 
-  if (settings.markCompleteInSheet) await markComplete(dir, row).catch((e) => log(run, `sheet write-back failed for ${row.id}: ${e.message}`));
+/**
+ * The tail of a paid row: upload the clip, then tick the sheet.
+ *
+ * This used to live inline at the end of renderRow, which meant it existed only for as
+ * long as the run did. A restart between the render and these two steps — `node --watch`
+ * does that on any file edit — left the row at "rendered": paid for and on disk, never
+ * uploaded, never marked. `isPending` excludes such a row from every future run, so
+ * nothing ever came back for it and the only way forward was to pay for the same clip a
+ * second time. Out here it can be called again later, by the orphan hook or by the head
+ * of the next run.
+ *
+ * Safe to call twice: it re-reads the row, skips an upload that already has a key and a
+ * sheet write that has already happened. An upload failure still throws — a Wasabi 403 is
+ * a configuration answer and the caller is entitled to halt the run on it — while a sheet
+ * failure is reported through `onSheetError` and never costs the clip.
+ */
+export async function finishRow(dir, rowId, { onSheetError = null } = {}) {
+  const settings = await readSettings(dir);
+  const row = (await listRows(dir)).find((r) => r.id === rowId);
+  if (!row?.clip) return row || null;
+
+  if (bucketConfigured(settings) && !row.wasabiKey) {
+    // The clip can be gone — deleted by hand between the render and here. That is not a
+    // reason to abort the run, and it is certainly not a reason to tick Complete for a
+    // clip nobody has: say so on the row and leave the decision to re-render to a person.
+    if (!(await exists(path.join(dir, row.clip)))) {
+      await patchRow(dir, rowId, (r) => {
+        r.status = "failed";
+        // Drop the path too. The row claiming a clip it does not have is what made it
+        // look finishable in the first place, and leaving it set would send every later
+        // run back round this same dead end.
+        r.clip = null;
+        r.error = `clip missing from disk (${row.clip}) — never uploaded, so nothing to finish`;
+      });
+      return (await listRows(dir)).find((r) => r.id === rowId);
+    }
+    const key = await uploadClip(dir, settings, row, path.join(dir, row.clip));
+    if (key) await patchRow(dir, rowId, (r) => { r.status = "uploaded"; r.wasabiKey = key; });
+  }
+
+  if (settings.markCompleteInSheet && !row.sheetComplete) {
+    try {
+      // A null return means write-back is not configured for this row — no sheet, no
+      // Complete column, no line number — which is not the same as having marked it.
+      if (await markComplete(dir, row)) await patchRow(dir, rowId, (r) => { r.sheetComplete = true; });
+    } catch (e) {
+      if (!onSheetError) throw e;
+      onSheetError(e);
+    }
+  }
+
+  return (await listRows(dir)).find((r) => r.id === rowId);
+}
+
+/**
+ * Finish every row an earlier run left half-done. Costs nothing — the clips are already
+ * paid for and on disk — so it runs at the head of each run, which is what makes a stop
+ * mid-upload recoverable rather than permanent.
+ */
+export async function finishStranded(dir, { onSheetError = null } = {}) {
+  const settings = await readSettings(dir);
+  const bucket = bucketConfigured(settings);
+  const stranded = (await listRows(dir)).filter((r) =>
+    r.clip && ((bucket && !r.wasabiKey) || (settings.markCompleteInSheet && !r.sheetComplete)));
+
+  const done = [];
+  for (const row of stranded) done.push(await finishRow(dir, row.id, { onSheetError }));
+  return done;
 }
 
 /** A clip cost real money — never overwrite one silently. */
@@ -718,9 +802,12 @@ export async function balanceUsd() {
   } catch { return null; }
 }
 
+/** Is there anywhere to upload to at all? With no bucket a run keeps its clips locally. */
+const bucketConfigured = (settings) => Boolean(settings.wasabi?.bucket || process.env.WASABI_BUCKET);
+
 /** Upload the clip. With no bucket configured a run still renders and keeps clips locally. */
 async function uploadClip(dir, settings, row, absFile) {
-  if (!settings.wasabi?.bucket && !process.env.WASABI_BUCKET) return null;
+  if (!bucketConfigured(settings)) return null;
   const wasabi = await import("./wasabi.js");
   return wasabi.putClip(settings.wasabi, { section: row.section, id: row.id, file: absFile });
 }

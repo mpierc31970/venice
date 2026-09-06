@@ -18,6 +18,13 @@ npm run dev                  # API on :3939, UI on http://localhost:5173
 
 Production-style (single port): `npm run build && npm start` → http://localhost:3939
 
+**Running a paid batch: use `npm run dev:batch`.** It is the same two processes with the
+API's `--watch` dropped. A batch run lives in memory, and `node --watch` restarts the
+server on any edit to a file it loaded — which ends the run mid-section, silently. The
+clips already bought are recovered either way (the next run finishes them before it spends
+anything), but the run itself does not resume, so a long render wants the server that does
+not restart.
+
 ## The nine steps
 
 1. **Project setup** — title, logline, default text/image/edit/video/TTS models (lists come live from `/models`).
