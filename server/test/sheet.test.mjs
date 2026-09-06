@@ -111,17 +111,24 @@ for (const s of sections) { const c = cost(s.rows); if (spent + c > budget) brea
 eq([done, +spent.toFixed(2)], [5, 88.18], "$92.30 completes 5 whole sections for $88.18");
 
 console.log("\ncomplete column");
-eq(rows.filter((r) => r.sheetComplete).length, 0, "nothing marked complete yet");
+// Unlike every other fact here, the Complete column is not a stable property of the
+// script — it fills in as the lesson renders, and asserting it was empty just meant the
+// suite broke the first time a section actually finished. So these drive off the live
+// sheet's shape with the column set explicitly: the parser is what is under test, not
+// how much of the lesson happens to be done today.
+const withComplete = (mark) => rowsFromSheet(
+  { headers: sheet.headers, rows: sheet.rows.map((r, i) => [...r.slice(0, 5), mark(i)]) },
+  LADDER,
+).rows;
+
+eq(withComplete(() => "").filter((r) => r.sheetComplete).length, 0, "a blank column reads as nothing complete");
+eq(withComplete(() => "x").filter((r) => r.sheetComplete).length, rows.length, "a full column reads as all complete");
 {
-  const marked = {
-    headers: sheet.headers,
-    rows: sheet.rows.map((r, i) => (i < 3 ? [...r.slice(0, 5), "x"] : r)),
-  };
-  const got = rowsFromSheet(marked, LADDER);
-  eq(got.rows.filter((r) => r.sheetComplete).length, 3, "3 rows read as complete");
-  eq(got.rows.slice(0, 3).map((r) => r.status), ["complete", "complete", "complete"],
+  const got = withComplete((i) => (i < 3 ? "x" : ""));
+  eq(got.filter((r) => r.sheetComplete).length, 3, "3 rows read as complete");
+  eq(got.slice(0, 3).map((r) => r.status), ["complete", "complete", "complete"],
      "complete rows start out of production");
-  eq(got.rows[3].status, "pending", "unmarked rows stay pending");
+  eq(got[3].status, "pending", "unmarked rows stay pending");
 }
 
 console.log(failures ? `\nFAIL ${failures} assertion(s)` : "\nPASS all assertions");

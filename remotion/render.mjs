@@ -13,8 +13,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundle } from "@remotion/bundler";
-import { renderMedia, selectComposition } from "@remotion/renderer";
+import { getVideoMetadata, renderMedia, selectComposition } from "@remotion/renderer";
 import { ensureFocus } from "./focus.mjs";
+import { preflight } from "./preflight.mjs";
 import { projectDir } from "./project-dir.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -58,6 +59,19 @@ for (const section of sections) {
   const timeline = JSON.parse(
     await fs.readFile(path.join(dir, "timeline", `${section}.json`), "utf8")
   );
+
+  // Two seconds of arithmetic against four minutes of rendering. A clip that is missing,
+  // unreadable or shorter than the trim it is given fails deep inside the compositor as
+  // "No frame found at position N", wrapped in a Rust backtrace, long after the bundle —
+  // and it names a temp file rather than the segment. Answer it here, by name, first.
+  const problems = await preflight(timeline, (clip) => getVideoMetadata(path.join(dir, clip)));
+  if (problems.length) {
+    console.error(`Section ${section} cannot be assembled — ${problems.length} problem(s):`);
+    for (const p of problems) console.error(`  ${p}`);
+    console.error("Re-render the segments named above, then rebuild the timeline.");
+    process.exit(1);
+  }
+
   ensureFocus(dir, timeline, (line) => console.log(line));
 }
 

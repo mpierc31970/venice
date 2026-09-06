@@ -18,6 +18,8 @@
     "test:batch": "node server/test/batch.test.mjs",
     "test:orphan": "node server/test/orphan.test.mjs",
     "test:finish": "node server/test/finish.test.mjs",
+    "test:assemble": "node server/test/assemble.test.mjs",
+    "test:preflight": "node server/test/preflight.test.mjs",
     "test:diagrams": "node server/test/diagrams.test.mjs",
     "test:slides": "node server/test/slides.test.mjs",
     "test:premiere": "node server/test/premiere.test.mjs",

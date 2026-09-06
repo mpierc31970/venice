@@ -45,10 +45,13 @@ export default function Batch({ id }) {
   // a row as "rendered" long after the server had recorded it as failed. Now the worst it
   // can be is 30s out of date.
   const running = !!data?.run?.running;
+  // An assembly counts as live for the poll but not for the elapsed ticker below: it
+  // reports a real percentage of its own, so there is nothing to interpolate.
+  const live = running || !!data?.assembly?.running;
   useEffect(() => {
-    const t = setInterval(load, running ? 6000 : 30000);
+    const t = setInterval(load, live ? 6000 : 30000);
     return () => clearInterval(t);
-  }, [running, load]);
+  }, [live, load]);
 
   // The server only learns a new elapsed every 8s, so the bar is interpolated from the
   // job's submit time on a 1s tick. It moves smoothly and never claims to be finished:
@@ -69,7 +72,7 @@ export default function Batch({ id }) {
 
   if (!data) return <div className="page"><Spinner /></div>;
 
-  const { settings, budget, balance, images, sections, run: runInfo } = data;
+  const { settings, budget, balance, images, sections, run: runInfo, assembly } = data;
   const allRows = sections.flatMap((s) => s.rows);
   const nothingWatchedYet = !allRows.some((r) => ["rendered", "uploaded"].includes(r.status));
   const where = settings.wasabi?.bucket
@@ -208,7 +211,7 @@ export default function Batch({ id }) {
 
       <SettingsCard id={id} settings={settings} onSave={run} />
 
-      <Sections id={id} sections={sections} budget={budget} busy={busy} ask={askRow} askSection={askSection} askReset={askReset} run={runInfo} now={now} act={run} />
+      <Sections id={id} sections={sections} budget={budget} busy={busy} ask={askRow} askSection={askSection} askReset={askReset} run={runInfo} now={now} act={run} assembly={assembly} settings={settings} />
     </div>
   );
 }
@@ -507,7 +510,7 @@ function SettingsCard({ id, settings, onSave }) {
 
 /* ------------------------------------------------------------- sections ---- */
 
-function Sections({ id, sections, budget, busy, ask, askSection, askReset, run, now, act }) {
+function Sections({ id, sections, budget, busy, ask, askSection, askReset, run, now, act, assembly, settings }) {
   const [open, setOpen] = useState({});
   const costOf = (sid) => budget?.sections?.find((b) => b.id === sid);
   if (!sections.length) return <div className="card"><Empty>Import the sheet to see the sections.</Empty></div>;
@@ -536,7 +539,7 @@ function Sections({ id, sections, budget, busy, ask, askSection, askReset, run, 
             {open[s.id] ? (
               <div className="stack" style={{ padding: "0 16px 14px" }}>
                 {s.rows.map((row) => <Row key={row.id} id={id} row={row} busy={busy} ask={ask} live={run?.current?.row === row.id ? run.current : null} now={now} />)}
-                <SectionFooter id={id} section={s} busy={busy} act={act} askReset={askReset} />
+                <SectionFooter id={id} section={s} busy={busy} act={act} askReset={askReset} assembly={assembly} run={run} settings={settings} />
               </div>
             ) : null}
           </div>
@@ -551,19 +554,32 @@ function Sections({ id, sections, budget, busy, ask, askSection, askReset, run, 
  * repeatable — it is deliberately not coupled to anything that costs money, so this can
  * be re-run as often as the graphics need tuning.
  */
-function SectionFooter({ id, section, busy, act, askReset }) {
+function SectionFooter({ id, section, busy, act, askReset, assembly, run, settings }) {
   const done = section.rows.filter((r) => ["rendered", "uploaded"].includes(r.status)).length;
   if (!section.complete || !done) return null;
+  // Rendered and uploaded are two different achievements, and they used to be counted as
+  // one — a clip that rendered but never reached the bucket still read as done. State both.
+  const wasabiOn = !!settings?.wasabi?.bucket;
+  const uploaded = section.rows.filter((r) => r.wasabiKey).length;
+  const shortOnUploads = wasabiOn && uploaded < done;
+  // Assembly state is global to the project, so only claim it when it is this section's.
+  const mine = assembly?.section === section.id ? assembly : null;
+  const assembling = !!mine?.running;
+  const asmKey = "asm-" + section.id;
   const key = "tl-" + section.id;
   const write = act(key, () => api.post(`/api/projects/${id}/batch/section/${section.id}/timeline`, {}), `timeline/${section.id}.json written.`);
   const premiere = act("xml-" + section.id, async () => {
     const r = await api.post(`/api/projects/${id}/batch/section/${section.id}/premiere`, {});
     return r;
   }, `${section.id}.xml written — import it in Premiere.`);
+  const build = act(asmKey, () => api.post(`/api/projects/${id}/batch/section/${section.id}/assemble`, {}),
+    `Assembling section ${section.id} — this runs as its own process and takes a few minutes.`);
 
   return (
     <div className="row" style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 2 }}>
-      <span className="chip ok">all {done} rendered</span>
+      <span className={`chip ${shortOnUploads ? "warn" : "ok"}`}>
+        all {done} rendered{wasabiOn ? ` · ${uploaded} uploaded` : ""}
+      </span>
       <Button className="sm" busy={busy === key} onClick={write}
         title="Writes timeline/<section>.json — the trim points and clip order Remotion reads. Free, and safe to re-run.">
         {section.timeline ? "Rewrite timeline" : "Build timeline"}
@@ -578,9 +594,22 @@ function SectionFooter({ id, section, busy, act, askReset }) {
         Reset
       </Button>
       <span className="grow" />
+      {mine?.error ? <span className="chip warn" title={mine.error}>assembly failed</span> : null}
       {section.video
         ? <a className="btn sm" href={media(id, section.video)} target="_blank" rel="noreferrer">▶ Play section video</a>
-        : <span className="dim small">Section video is assembled in Remotion — stage 2</span>}
+        : null}
+      <Button className={section.video ? "sm ghost" : "sm primary"}
+        busy={busy === asmKey} disabled={!section.timeline || assembling || !!run?.running}
+        onClick={build}
+        title={!section.timeline
+          ? "Build the timeline first — it is what Remotion reads"
+          : run?.running
+            ? "A render run is in progress — let it finish first"
+            : "Renders timeline/<section>.json into sections/<section>.mp4 with Remotion. Free, and safe to re-run."}>
+        {assembling
+          ? `Assembling… ${mine.percent}%${mine.attempt > 1 ? ` (retry ${mine.attempt}/${mine.attempts})` : ""}`
+          : section.video ? "Re-assemble video" : "Assemble section video"}
+      </Button>
     </div>
   );
 }

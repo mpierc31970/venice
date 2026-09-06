@@ -15,6 +15,7 @@ import {
   buildPrompt, forgetImages, quoteRow, sectionCost, isPending, balanceUsd,
   start, stop, runState, clearRun, writeTimeline, patchRow, resetSection,
 } from "../lib/batch.js";
+import { assemble, assembleState } from "../lib/assemble.js";
 
 const r = Router();
 
@@ -92,7 +93,7 @@ r.get("/", async (req, res, next) => {
     // and depend only on duration, so this is two calls for 109 rows, both cached.
     const prices = await priceByDuration(settings, list);
     res.json({
-      settings, run: await runWithJob(dir), balance, budget: cost,
+      settings, run: await runWithJob(dir), assembly: assembleState(dir), balance, budget: cost,
       sheetUrl: state.sheetUrl, importedAt: state.importedAt, warnings: state.warnings || [],
       images: await imageStatus(dir, settings),
       sections: await Promise.all(list.map(async (s) => ({
@@ -243,6 +244,22 @@ r.post("/section/:sectionId/timeline", async (req, res, next) => {
     if (!section) throw httpError(404, "No such section " + req.params.sectionId);
     res.json(await writeTimeline(req.proj.dir, section));
   } catch (e) { next(e); }
+});
+
+// POST /section/:sectionId/assemble -> render timeline/<id>.json into sections/<id>.mp4.
+// Free and repeatable: it reads clips that are already paid for and writes one file.
+// Returns immediately — the render runs as its own process; poll GET / for `assembly`.
+r.post("/section/:sectionId/assemble", async (req, res, next) => {
+  try {
+    const { dir } = req.proj;
+    // Not a money guard — a fairness one. A render run is already downloading clips and
+    // talking to Venice on a timer, and Remotion wants a headless Chromium and every core
+    // it can get. Doing both at once is how the paid half loses.
+    if (runState(dir).running) throw httpError(409, "A render run is in progress — let it finish before assembling");
+    const section = (await sections(dir)).find((s) => s.id === req.params.sectionId);
+    if (!section) throw httpError(404, "No such section " + req.params.sectionId);
+    res.json(await assemble(dir, section.id));
+  } catch (e) { next(e.status ? e : httpError(409, e.message)); }
 });
 
 // POST /section/:sectionId/premiere -> writes timeline/<id>.xml, a Premiere-importable
