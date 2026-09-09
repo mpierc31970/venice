@@ -28,17 +28,24 @@ export const RemotionRoot: React.FC = () => (
         defaultProps={{ src: `timeline/${section}.json`, timeline: null, focus: {}, plates: null }}
         calculateMetadata={async ({ props }) => {
           const timeline: Timeline = await fetch(staticFile(props.src)).then((r) => r.json());
-          // Measured by focus.mjs, which render.mjs runs before it bundles. Absent is
-          // fine and means centred — it is only ever a correction to the crop.
-          const focus: Focus = await fetch(staticFile(`focus/${section}.json`))
-            .then((r) => (r.ok ? r.json() : {}))
-            .catch(() => ({}));
-          // Written by plates.mjs, which render.mjs also runs before it bundles. Null
+          // Written by plates.mjs, which render.mjs runs before it bundles. Null
           // means this section was generated against a room rather than a green screen,
           // and every clip plays whole, exactly as it did before the key existed.
           const plates: Plates | null = await fetch(staticFile(`plates/${section}.json`))
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null);
+          // Measured by focus.mjs, which render.mjs runs before it bundles on the other
+          // branch of the same choice. A plated segment crops to the plate's normalised
+          // target and never reads this, so a section whose segments are all plated has
+          // no focus file to fetch and asking for one only logs a 404 that reads like a
+          // fault. A segment without a plate still renders down the unkeyed path, which
+          // does read it, so the fetch stays for as long as one of those is present.
+          const plated = (id: string) => Boolean(plates?.segments?.[id] && plates?.target);
+          const focus: Focus = timeline.segments.every((s) => plated(s.id))
+            ? {}
+            : await fetch(staticFile(`focus/${section}.json`))
+                .then((r) => (r.ok ? r.json() : {}))
+                .catch(() => ({}));
           return {
             durationInFrames: timeline.durationInFrames,
             fps: timeline.fps,
