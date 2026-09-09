@@ -151,6 +151,16 @@ for (const section of sections) {
     serveUrl,
     codec: "h264",
     outputLocation: out,
+    // remotion.config.ts is read by the Remotion CLI and nothing else, so every setting
+    // this render depends on has to be named here or it silently takes the default.
+    //
+    // Concurrency defaults to about half the cores — eight headless Chrome tabs on a
+    // sixteen-core machine, each decoding the segment's stacked OffthreadVideo layers.
+    // That is what exhausts a 16 GB machine mid-render. Three is slower by a little and
+    // survives; the render is waiting on video decode, not on cores.
+    concurrency: 3,
+    offthreadVideoCacheSizeInBytes: 512 * 1024 * 1024,
+    imageFormat: "jpeg",
     onProgress: ({ progress }) => bar(`section ${section}`)(progress),
   });
 
