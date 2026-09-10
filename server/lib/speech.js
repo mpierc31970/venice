@@ -48,10 +48,42 @@ const HOP_S = 0.05;
 const QUIET = 0.08;    // 22dB below her speaking level counts as not speaking
 
 /**
- * @returns {Promise<number>} seconds from the clip's start to the end of the last speech,
- * or 0 if the clip is silent throughout.
+ * The samples out of a RIFF/WAVE buffer, by walking its chunk table.
+ *
+ * Not by skipping a fixed 44 bytes: this ffmpeg writes a LIST chunk between `fmt ` and
+ * `data`, putting the samples at byte 78. Assuming 44 fed 34 bytes of chunk header into
+ * the envelope as a burst of noise at position zero, which read as speech starting
+ * immediately and put every `startsAt` at 0.
  */
-export async function measureSpeechEnd(clip, ffmpeg = ffmpegPath()) {
+function samplesOf(buf) {
+  if (buf.length < 12 || buf.toString("ascii", 0, 4) !== "RIFF" || buf.toString("ascii", 8, 12) !== "WAVE") {
+    throw new Error("not a RIFF/WAVE file");
+  }
+  let i = 12;
+  while (i + 8 <= buf.length) {
+    const id = buf.toString("ascii", i, i + 4);
+    const size = buf.readUInt32LE(i + 4);
+    const body = i + 8;
+    if (id === "data") {
+      const usable = Math.min(size, buf.length - body) & ~1;
+      // Copy rather than view: `body` has no alignment guarantee and Int16Array over an
+      // odd byteOffset throws.
+      return new Int16Array(buf.buffer.slice(buf.byteOffset + body, buf.byteOffset + body + usable));
+    }
+    i = body + size + (size % 2); // chunks are word-aligned
+  }
+  throw new Error("no data chunk in the wav");
+}
+
+/**
+ * @returns {Promise<{startsAt: number, endsAt: number}>} when she starts and stops
+ * speaking, in seconds from the clip's start. Both 0 if the clip is silent throughout.
+ *
+ * The start matters as much as the end: captions are spread across this span, and Wan
+ * leaves 0.3 to 0.8 seconds of silence before the first word. Spread from frame zero
+ * instead and every caption in the clip arrives early.
+ */
+export async function measureSpeechSpan(clip, ffmpeg = ffmpegPath()) {
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "venice-speech-"));
   try {
     // Via a wav file rather than a pipe: the bundled ffmpeg decodes s16le but does not
@@ -61,11 +93,10 @@ export async function measureSpeechEnd(clip, ffmpeg = ffmpegPath()) {
       "-c:a", "pcm_s16le", wav]);
     const buf = await fsp.readFile(wav);
 
-    // Skip the 44-byte canonical wav header; ffmpeg writes exactly that for pcm_s16le.
-    const pcm = new Int16Array(buf.buffer, buf.byteOffset + 44, (buf.length - 44) >> 1);
+    const pcm = samplesOf(buf);
     const hop = Math.round(SR * HOP_S);
     const hops = Math.floor(pcm.length / hop);
-    if (hops < 2) return 0;
+    if (hops < 2) return { startsAt: 0, endsAt: 0 };
 
     const env = new Float64Array(hops);
     for (let i = 0; i < hops; i++) {
@@ -78,8 +109,11 @@ export async function measureSpeechEnd(clip, ffmpeg = ffmpegPath()) {
     // it and a long tail of near-silence does not drag it down.
     const sorted = Float64Array.from(env).sort();
     const floor = sorted[Math.floor(hops * 0.9)] * QUIET;
-    for (let i = hops - 1; i >= 0; i--) if (env[i] > floor) return (i + 1) * HOP_S;
-    return 0;
+
+    let first = -1, last = -1;
+    for (let i = 0; i < hops; i++) if (env[i] > floor) { if (first < 0) first = i; last = i; }
+    if (first < 0) return { startsAt: 0, endsAt: 0 };
+    return { startsAt: first * HOP_S, endsAt: (last + 1) * HOP_S };
   } finally {
     await fsp.rm(tmp, { recursive: true, force: true });
   }
@@ -95,9 +129,13 @@ export function readSpeech(dir, section) {
   }
 }
 
+const spans = (have) =>
+  Object.fromEntries(Object.entries(have).map(([id, v]) => [id, { startsAt: v.startsAt ?? 0, endsAt: v.endsAt }]));
+
 /**
- * Measure every segment whose clip is new or has changed, and return `{ id: seconds }`
- * for the whole section. Cheap to call: an unchanged clip keeps its measurement.
+ * Measure every segment whose clip is new or has changed, and return
+ * `{ id: { startsAt, endsAt } }` for the whole section. Cheap to call: an unchanged clip
+ * keeps its measurement.
  */
 export async function ensureSpeech(dir, rows, section, log = () => {}) {
   const have = readSpeech(dir, section);
@@ -105,7 +143,9 @@ export async function ensureSpeech(dir, rows, section, log = () => {}) {
 
   const stale = (row) => {
     const cached = have[row.id];
-    if (!cached) return true;
+    // `startsAt` arrived after `endsAt` did, so an entry without one predates captions
+    // being timed from the measurement and has to be taken again.
+    if (!cached || cached.startsAt === undefined) return true;
     try {
       const { size, mtimeMs } = fs.statSync(path.join(dir, row.clip));
       return cached.size !== size || cached.mtimeMs !== mtimeMs;
@@ -115,16 +155,20 @@ export async function ensureSpeech(dir, rows, section, log = () => {}) {
   };
 
   const missing = withClips.filter(stale);
-  if (!missing.length) return Object.fromEntries(Object.entries(have).map(([id, v]) => [id, v.endsAt]));
+  if (!missing.length) return spans(have);
 
   const ffmpeg = ffmpegPath();
   for (const row of missing) {
     const clip = path.join(dir, row.clip);
     try {
-      const endsAt = await measureSpeechEnd(clip, ffmpeg);
+      const { startsAt, endsAt } = await measureSpeechSpan(clip, ffmpeg);
       const { size, mtimeMs } = fs.statSync(clip);
-      have[row.id] = { endsAt: Number(endsAt.toFixed(2)), size, mtimeMs };
-      log(`speech ${row.id} ends at ${have[row.id].endsAt}s`);
+      have[row.id] = {
+        startsAt: Number(startsAt.toFixed(2)),
+        endsAt: Number(endsAt.toFixed(2)),
+        size, mtimeMs,
+      };
+      log(`speech ${row.id} runs ${have[row.id].startsAt}s to ${have[row.id].endsAt}s`);
     } catch (e) {
       // A clip that cannot be measured falls back to the stated timing rather than
       // failing the timeline: a wrong trim is recoverable, no timeline is not.
@@ -134,5 +178,5 @@ export async function ensureSpeech(dir, rows, section, log = () => {}) {
 
   await fsp.mkdir(path.dirname(speechFile(dir, section)), { recursive: true });
   await fsp.writeFile(speechFile(dir, section), JSON.stringify(have, null, 2) + "\n");
-  return Object.fromEntries(Object.entries(have).map(([id, v]) => [id, v.endsAt]));
+  return spans(have);
 }

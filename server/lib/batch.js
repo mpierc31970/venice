@@ -906,7 +906,7 @@ export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080,
   // measurement the stated timing is all there is, which is how this worked before.
   const cut = (r) => {
     const clipFrames = Math.round(parseInt(r.duration, 10) * fps);
-    const measured = speech?.[r.id];
+    const measured = speech?.[r.id]?.endsAt;
     const endsAt = measured > 0 ? measured + SPEECH_PAD_S : r.wantSeconds + TRIM_SAFETY_S;
     return Math.min(clipFrames, Math.round(endsAt * fps));
   };
@@ -957,7 +957,8 @@ export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080,
       // title is human-written. Remotion renders it by `kind` — list, sequence,
       // comparison, or plain points when the script has no detectable structure.
       diagram: diagramFor(r),
-      captions: captionsFor(r, fps),
+      // Same measurement as the cut above. Paced by anything else, they drift.
+      captions: captionsFor(r, fps, speech?.[r.id]?.endsAt > 0 ? speech[r.id] : null),
     })),
   };
 }

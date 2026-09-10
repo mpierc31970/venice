@@ -110,19 +110,27 @@ function chunkSentence(sentence) {
  * come from here — the script is what she was asked to say, and a transcript of a
  * mispronunciation should not become the on-screen text of a compliance course.
  */
-export function captionsFor(row, fps = 30) {
+export function captionsFor(row, fps = 30, span = null) {
   if (!row?.scriptText) return [];
   const chunks = sentences(row.scriptText).flatMap(chunkSentence);
   if (!chunks.length) return [];
 
-  const speechFrames = Math.round((row.wantSeconds || 0) * fps);
+  // speech.js's measurement of this clip when there is one, and the sheet's stated
+  // seconds when there is not. The two must not be mixed: buildTimeline cuts the segment
+  // on the measurement, so captions paced by the estimate finish early and slide out of
+  // step with her — by 2.5s on the worst segment of section 1.1, which is audible as the
+  // captions running ahead of the voice from the middle of the video onward.
+  const startFrame = span ? Math.round(span.startsAt * fps) : 0;
+  const endFrame = span ? Math.round(span.endsAt * fps) : Math.round((row.wantSeconds || 0) * fps);
+  const speechFrames = Math.max(0, endFrame - startFrame);
+
   const total = chunks.reduce((n, c) => n + c.length, 0);
-  let frame = 0;
+  let frame = startFrame;
   return chunks.map((text, i) => {
     const share = Math.round((text.length / total) * speechFrames);
     const fromFrame = frame;
-    // The last caption absorbs any rounding drift so the run ends exactly on speechFrames.
-    const toFrame = i === chunks.length - 1 ? speechFrames : Math.min(speechFrames, frame + share);
+    // The last caption absorbs any rounding drift so the run ends exactly on endFrame.
+    const toFrame = i === chunks.length - 1 ? endFrame : Math.min(endFrame, frame + share);
     frame = toFrame;
     return { text, fromFrame, toFrame };
   }).filter((c) => c.toFrame > c.fromFrame);

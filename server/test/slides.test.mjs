@@ -99,5 +99,28 @@ eq(sentences("One. Two! Three?"), ["One.", "Two!", "Three?"], "sentence split ke
   eq([one[0].fromFrame, one[0].toFrame], [0, 150], "spanning the whole scripted duration");
 }
 
+/* ------------------------------------------------- captions vs the clip ---- */
+// Regression, 2026-09-09. buildTimeline moved to cutting each segment on speech.js's
+// measurement while captions were still spread across the sheet's stated wantSeconds, so
+// they drifted against the voice — 2.5s out on section 1.1's worst segment, audible from
+// the middle of the video onward. Both must read the same measurement.
+console.log("\ncaptions follow the measured speech");
+{
+  const r = row({ wantSeconds: 26, scriptText: "First sentence here. Second sentence here. Third one here." });
+
+  const guessed = captionsFor(r, 30);
+  eq(guessed[guessed.length - 1].toFrame, 26 * 30, "with no measurement, captions end on the sheet's seconds");
+
+  // She actually speaks 0.8s to 28.5s — later than the sheet says, and not from frame zero.
+  const measured = captionsFor(r, 30, { startsAt: 0.8, endsAt: 28.5 });
+  eq(measured[0].fromFrame, Math.round(0.8 * 30), "the first caption waits for her to start");
+  eq(measured[measured.length - 1].toFrame, Math.round(28.5 * 30), "the last caption ends where she stops");
+  ok(measured[measured.length - 1].toFrame > guessed[guessed.length - 1].toFrame,
+    "and here that is later than the estimate would have put it");
+  ok(measured.every((c, i) => i === 0 || c.fromFrame === measured[i - 1].toFrame),
+    "captions still run back to back with no gap");
+  eq(measured.length, guessed.length, "the same words, only re-timed");
+}
+
 console.log(failures ? `\nFAIL ${failures} assertion(s)` : "\nPASS all assertions");
 process.exit(failures ? 1 : 0);
