@@ -59,16 +59,23 @@ import { diagramFor } from "./diagrams.js";
 // and how she is framed — plus the two lines that make her keyable: a flat, even screen,
 // and front lighting with no green spilling onto her.
 //
-// The framing paragraph is unchanged on purpose. It is the part that was working, and the
-// aspect moving to 1:1 does not change where her chin or her shoulders should sit.
+// The headroom is a measurement rather than an adjective because @image1 is one now. The
+// avatar was a four-panel contact sheet — full body, headshot, profile, back — and the
+// model picked among four framings before it started, which is where a 1.21x spread in
+// shot size across one section came from. It is a single headshot as of 2026-09-09, and
+// that headshot puts the top of her head a tenth of the frame below the top edge. Saying
+// "a small gap" left the model to reconcile a vague word with a specific picture; saying
+// the tenth, and naming @image1 as where it comes from, asks for what the reference
+// already shows. Her chin and shoulders are unchanged: that half was working.
 export const PROMPT_TEMPLATE = `Static talking-head shot, locked-off camera on a tripod at eye level. One
 woman, alone in front of a green screen.
 
 Framing, the same in every frame: the woman from @image1, facing the camera and
-looking into the lens, centered left to right, framed from mid-chest up. A
-small, even gap above the top of her head. Her chin sits near the middle of the
-frame and her shoulders fill the lower corners. She stays this size and in this
-place from the first frame to the last.
+looking into the lens, centered left to right, framed from mid-chest up. The top
+of her head sits one tenth of the frame height below the top edge, the same
+headroom as in @image1. Her chin sits near the middle of the frame and her
+shoulders fill the lower corners. She stays this size and in this place from the
+first frame to the last.
 
 Background: the plain chroma-key green screen from @image2, filling the frame
 edge to edge. One flat, even, uniform shade of green. No objects, no furniture,
@@ -87,14 +94,19 @@ the first.
 
 She speaks this line, and only this line: "{script}"
 
+Pronunciation: "implement" here is the noun, a tool. She says IM-pluh-muhnt,
+stressed on the first syllable, with the last syllable unstressed and soft. Not
+im-pluh-MENT.
+
 Only her face moves as she speaks. She does not lean toward or away from the
 camera, does not stand up, and does not drift left or right.
 
 After the last word she simply stops speaking. No new sentence, no repetition,
 no further dialogue for the rest of the clip.`;
 
-// The grid terms are not boilerplate: avatar.png *is* a four-panel contact sheet, and
-// this is cheap insurance against the model echoing that layout into the video. The
+// The grid terms date from an avatar.png that *was* a four-panel contact sheet, which the
+// model would echo into the video as a layout. The avatar is a single headshot now and
+// does not need them, but they cost nothing and the next reference image might. The
 // camera terms are listed one by one rather than as "camera movement" because that is
 // how a negative prompt is read — a push-in is not obviously an instance of a category
 // it was never named as part of.

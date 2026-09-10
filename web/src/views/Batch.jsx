@@ -505,7 +505,7 @@ function SettingsCard({ id, settings, onSave }) {
           <div className="field">
             <label>Negative prompt</label>
             <textarea className="mono" rows={3} value={s.negativePrompt || ""} onChange={(e) => set("negativePrompt", e.target.value)} />
-            <div className="hint">The grid terms matter: the avatar is a four-panel contact sheet, and this stops the model echoing that layout.</div>
+            <div className="hint">The grid terms are a guard from when the avatar was a four-panel contact sheet, which the model would echo as a layout. A single-headshot avatar does not need them, and they cost nothing to keep.</div>
           </div>
           <div className="grid2">
             <div className="field"><label>Model</label><input value={s.model} onChange={(e) => set("model", e.target.value)} className="mono" /></div>

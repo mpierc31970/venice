@@ -17,8 +17,10 @@ via the Sheets API with a service account.
   (title `Lesson1-Scripts`, one tab `Lesson 1`)
 - Columns: `Lesson - Section | Production Segment | Timing - Words | Visual | Script | Complete`
 - 109 segments, ids `1.1`–`1.109`, unique. 11 rows carry a Visual. Nothing marked Complete yet.
-- Assets: `D:\Business\Mona\CEU_Teaching\avatar.png` (4-panel contact sheet, 1672x941),
-  `videoBackground.png` (spa room, 1672x941). Both go in whole, unmodified.
+- Assets: `avatar.png` (single headshot, 849x849, square to match the 1:1 aspect),
+  `videoBackground.png` (spa room, 1672x941). Both go in whole, unmodified. The avatar was
+  a 4-panel contact sheet (1672x941) until 2026-09-09; the sheet is kept beside it as
+  `avatar.4panel-sheet.backup.png`.
 
 **Structure is Lesson → Section → Segment.** Column A is the grouping key: walking rows in
 sheet order, a change in column A starts the next video. 9 sections, sizes
@@ -154,10 +156,14 @@ code alone would have left the old prompt in production.
 
 ⚠️ **Untested. It has not rendered a single clip yet.** Render *one* row before the section
 — 1.17 is still the right one (a 27s script in a 30s clip, so it exercises the tail) — and
-put its first and last frame side by side. If the framing still drifts, the next lever is
-the avatar image, not more prompt words: `avatar.png` is a **four-panel contact sheet**, so
-the model is choosing among four framings before it starts. A single cropped headshot would
-remove that variable outright, at the cost of the "both images go in whole" decision.
+put its first and last frame side by side.
+
+**The avatar lever has since been pulled.** Section 1.1 rendered against the four-panel
+sheet and drifted exactly as predicted: x held to ±0.6% of frame width, but shot size
+ranged 0.90x to 1.14x across fifteen clips, because the model was choosing among four
+framings before it started. `avatar.png` is now a single 849x849 headshot. Whether that
+closes the size spread is the open question — measure a clip's tracked width against its
+neighbours in `plates/<section>.json` before rewriting any prompt wording.
 
 **Resetting a section** is `POST /api/projects/:id/batch/section/:id/reset`, or the *Reset*
 button in the section footer. It puts every row back to `pending`, clears the sheet's
