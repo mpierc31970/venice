@@ -158,12 +158,35 @@ code alone would have left the old prompt in production.
 — 1.17 is still the right one (a 27s script in a 30s clip, so it exercises the tail) — and
 put its first and last frame side by side.
 
-**The avatar lever has since been pulled.** Section 1.1 rendered against the four-panel
-sheet and drifted exactly as predicted: x held to ±0.6% of frame width, but shot size
-ranged 0.90x to 1.14x across fifteen clips, because the model was choosing among four
-framings before it started. `avatar.png` is now a single 849x849 headshot. Whether that
-closes the size spread is the open question — measure a clip's tracked width against its
-neighbours in `plates/<section>.json` before rewriting any prompt wording.
+**The avatar lever has since been pulled, and it worked.** Section 1.1 rendered against
+the four-panel sheet and drifted exactly as predicted: x held to ±0.6% of frame width,
+but shot size ranged 0.90x to 1.14x across fifteen clips, because the model was choosing
+among four framings before it started. `avatar.png` is now a single 849x849 headshot, and
+fifteen fresh generations against it spread **1.036x** — a 26% variation reduced to 3.6%.
+The prompt rewrite that was queued behind this turned out not to be needed; only the
+headroom line changed, and only to match the new reference.
+
+Expect roughly **one bad draw in fifteen** rather than continuous drift. 1.21 came back a
+much closer shot and was re-rendered for $1.56. Check a new section the same way: per-clip
+`track` against the section `target` in `plates/<section>.json`.
+
+## Before rendering a section that has never been rendered
+
+Only 1.1 has been through the fixed pipeline. Sections 1.2 onward were scripted to the
+same optimistic timings and have not been checked.
+
+**Count the words first.** Wan delivers at 1.97–2.32 words a second, measured across
+section 1.1, with 0.3–0.8s of lead-in silence, so a 30s clip holds about **56 words**. The
+sheet's "Timing - Words" column is not a prediction — `sheet.js` parses a number somebody
+typed — so it will not catch an overrun. Rewrite anything over the ceiling in the Script
+column before starting a paid run.
+
+A script that overruns cannot be fixed afterwards: 30s is the top of Wan's duration ladder,
+so if she is still speaking at the end no trim reaches it and the row costs another $1.56.
+Everything else rides along on its own — the avatar and prompt live in `batch.json`
+settings rather than per-section state, and `server/lib/speech.js` places each trim by
+measuring the clip. Verify afterwards by comparing measured speech end against `trimAfter`
+in `timeline/<section>.json`; they should differ by `SPEECH_PAD_S` and nothing more.
 
 **Resetting a section** is `POST /api/projects/:id/batch/section/:id/reset`, or the *Reset*
 button in the section footer. It puts every row back to `pending`, clears the sheet's
