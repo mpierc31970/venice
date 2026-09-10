@@ -11,7 +11,7 @@ process.env.VENICE_API_KEY = "test-key-not-used";
 globalThis.fetch = async (url) => { throw new Error("no network in this test: " + url); };
 
 const {
-  buildPrompt, mergeRows, buildTimeline, priceOf, isPending, scriptHash,
+  buildPrompt, mergeRows, buildTimeline, priceOf, isPending, scriptHash, SPEECH_PAD_S,
   withRows, patchRow, listRows, readSettings, DEFAULTS, PROMPT_TEMPLATE, TRIM_SAFETY_S, FPS,
 } = await import(new URL("../lib/batch.js", import.meta.url).href);
 
@@ -118,6 +118,32 @@ console.log("\ntimeline");
   eq(t.avatar.motion, "none", "the PiP circle is never animated — no zoom, no scale, no drift");
   eq(t.avatar.transition, "cut", "it appears on a cut, not a transition");
   eq([t.avatar.pip.shape, t.avatar.pip.corner], ["circle", "bottom-right"], "circle, lower right, every time");
+
+  // A measured speech end outranks the sheet's stated timing. The sheet said 27s for 1.1,
+  // which is where the old cut landed; she actually speaks until 28.6s, and cutting at
+  // 27.4s took the last word off. Seven of section 1.1's fifteen segments were cut this
+  // way before the measurement existed.
+  const measured = buildTimeline(section, { speech: { "1.1": 28.6, "1.2": 12.0 } });
+  eq(measured.segments[0].trimAfter, Math.round((28.6 + SPEECH_PAD_S) * FPS),
+    "a measured speech end places the cut, not the sheet's timing");
+  ok(measured.segments[0].trimAfter > t.segments[0].trimAfter,
+    "and here that means a later cut than the stated timing gave");
+  eq(measured.segments[1].trimAfter, Math.round((12.0 + SPEECH_PAD_S) * FPS),
+    "a clip she finishes early is cut early — the measurement cuts both ways");
+  eq(measured.durationInFrames, measured.segments.reduce((n, s) => n + s.trimAfter, 0),
+    "the section length follows the measured cuts");
+
+  // A clip whose speech runs to its own end cannot be saved by trimming: the cut stops at
+  // the footage. 1.13 was exactly this — 63 words in a 30s clip, still talking at 30.00s.
+  const overruns = buildTimeline(section, { speech: { "1.1": 31.0 } });
+  eq(overruns.segments[0].trimAfter, overruns.segments[0].clipFrames,
+    "a measurement past the end of the clip is clamped to the clip");
+
+  // Absent, zero and missing all mean "not measured" and fall back rather than cutting at 0.
+  for (const [label, speech] of [["an empty map", {}], ["a zero", { "1.1": 0 }], ["null", null]]) {
+    eq(buildTimeline(section, { speech }).segments[0].trimAfter,
+      Math.round((27 + TRIM_SAFETY_S) * FPS), `${label} falls back to the sheet's timing`);
+  }
 }
 
 /* -------------------------------------------------------------- quote ---- */

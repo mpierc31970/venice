@@ -28,6 +28,7 @@ import { fetchSheet, parseCsv, rowsFromSheet, groupSections, parseLadder, sectio
 import { setCells, colLetter, quoteTab } from "./gsheets.js";
 import { slidesForSection, captionsFor } from "./slides.js";
 import { diagramFor } from "./diagrams.js";
+import { ensureSpeech } from "./speech.js";
 
 /* ------------------------------------------------------------ settings ---- */
 
@@ -873,6 +874,14 @@ async function markComplete(dir, row) {
  * the snap-up padding is cut at assembly rather than reaching the viewer.
  */
 export const TRIM_SAFETY_S = 0.4;
+
+/**
+ * Breath after the last word, when the cut is placed by measurement rather than by the
+ * sheet's stated timing. Smaller than TRIM_SAFETY_S because it is padding a real number
+ * instead of absorbing an unknown: speech.js has already found where she stops, and this
+ * only keeps the cut off the final consonant.
+ */
+export const SPEECH_PAD_S = 0.25;
 export const FPS = 30;
 
 /**
@@ -887,14 +896,20 @@ export const FPS = 30;
  */
 export const TRANSITION = { kind: "cut", frames: 0 };
 
-export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 } = {}) {
+export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080, speech = null } = {}) {
   // Emphasis slides are chosen across the whole section, so two never land back to back.
   const slides = slidesForSection(section.rows);
   const rendered = section.rows.filter((r) => RENDERED.has(r.status));
-  const cut = (r) => Math.min(
-    Math.round(parseInt(r.duration, 10) * fps),
-    Math.round((r.wantSeconds + TRIM_SAFETY_S) * fps)
-  );
+  // Where to cut. `speech` is speech.js's measurement of the clip — where she actually
+  // stops — and it wins whenever it exists, because `wantSeconds` is a length typed into
+  // the sheet before the clip was generated and Wan does not honour it. Without a
+  // measurement the stated timing is all there is, which is how this worked before.
+  const cut = (r) => {
+    const clipFrames = Math.round(parseInt(r.duration, 10) * fps);
+    const measured = speech?.[r.id];
+    const endsAt = measured > 0 ? measured + SPEECH_PAD_S : r.wantSeconds + TRIM_SAFETY_S;
+    return Math.min(clipFrames, Math.round(endsAt * fps));
+  };
   // A transition that overlaps two clips shortens the section by one of itself per join —
   // n-1, not n. Cuts overlap nothing, so this is zero and the section is the sum of its
   // segments; the term stays because the arithmetic has to be right either way.
@@ -927,10 +942,7 @@ export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 
       id: r.id,
       clip: r.clip,
       clipFrames: Math.round(parseInt(r.duration, 10) * fps),
-      trimAfter: Math.min(
-        Math.round(parseInt(r.duration, 10) * fps),
-        Math.round((r.wantSeconds + TRIM_SAFETY_S) * fps)
-      ),
+      trimAfter: cut(r),
       // The sheet already chose: the 11 rows carrying a Visual note are the ones where a
       // graphic belongs, and they are spread one or two per section. "pip" means the
       // graphic takes the frame and the talking head shrinks into a corner — the notes
@@ -951,7 +963,10 @@ export function buildTimeline(section, { fps = FPS, width = 1920, height = 1080 
 }
 
 export async function writeTimeline(dir, section) {
-  const timeline = buildTimeline(section);
+  // Measure before building: the cut belongs where she stops speaking, and only the clip
+  // knows that. Cached per clip, so this is free for a section nothing has re-rendered.
+  const speech = await ensureSpeech(dir, section.rows, section.id, (line) => console.log("[speech]", line));
+  const timeline = buildTimeline(section, { speech });
   await writeJson(P.timeline(dir, section.id), timeline);
   return timeline;
 }
