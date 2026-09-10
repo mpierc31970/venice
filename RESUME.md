@@ -175,18 +175,26 @@ much closer shot and was re-rendered for $1.56. Check a new section the same way
 Only 1.1 has been through the fixed pipeline. Sections 1.2 onward were scripted to the
 same optimistic timings and have not been checked.
 
-**Count the words first.** Wan delivers at 1.97–2.32 words a second, measured across
-section 1.1, with 0.3–0.8s of lead-in silence, so a 30s clip holds about **56 words**. The
-sheet's "Timing - Words" column is not a prediction — `sheet.js` parses a number somebody
-typed — so it will not catch an overrun. Rewrite anything over the ceiling in the Script
-column before starting a paid run.
+**Do not pre-emptively rewrite by word count.** Wan's delivery varies **1.94–2.32 words a
+second** between generations of the same length, measured across section 1.1, so the count
+does not predict an overrun. Ten rows of 60–66 words all finished inside 30s, worst ending
+29.45s; the one row that overran was 63 words, shorter than most that fitted. 56 words is
+what fits even at the slowest rate ever seen — a guarantee, not a threshold, and treating
+it as one means rewriting nearly every script, since 1.2's twelve rows are all 60–66 words
+exactly like 1.1's.
 
-A script that overruns cannot be fixed afterwards: 30s is the top of Wan's duration ladder,
-so if she is still speaking at the end no trim reaches it and the row costs another $1.56.
+**Detect instead.** `server/lib/speech.js` measures every clip, so an overrun shows up as
+speech reaching the clip's own end — where no trim helps, because 30s is the top of Wan's
+duration ladder. Render the section as written, then compare each row's `endsAt` in
+`speech/<section>.json` against its clip length and cut only the rows that actually hit it.
+Expect roughly one in fifteen, at $1.56 each, against rewriting a dozen pieces of regulated
+teaching content by hand.
+
 Everything else rides along on its own — the avatar and prompt live in `batch.json`
-settings rather than per-section state, and `server/lib/speech.js` places each trim by
-measuring the clip. Verify afterwards by comparing measured speech end against `trimAfter`
-in `timeline/<section>.json`; they should differ by `SPEECH_PAD_S` and nothing more.
+settings rather than per-section state, and each trim is placed by the measurement. Sanity
+check afterwards: measured speech end against `trimAfter` in `timeline/<section>.json`
+should differ by `SPEECH_PAD_S` and nothing more, and the captions should span
+`startsAt`–`endsAt` rather than starting at frame zero.
 
 **Resetting a section** is `POST /api/projects/:id/batch/section/:id/reset`, or the *Reset*
 button in the section footer. It puts every row back to `pending`, clears the sheet's
